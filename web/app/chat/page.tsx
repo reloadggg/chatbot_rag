@@ -39,7 +39,7 @@ export default function ChatPage() {
 
     try {
       const response = await fetch(
-        `http://172.27.78.67:8001/stream?question=${encodeURIComponent(input)}`
+        `http://localhost:8001/stream?question=${encodeURIComponent(input)}`
       );
 
       if (!response.ok) {

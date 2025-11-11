@@ -38,7 +38,7 @@ export default function DocsPage() {
   // 获取文档列表
   const fetchDocuments = async () => {
     try {
-      const response = await fetch('http://172.27.78.67:8001/documents');
+      const response = await fetch('http://localhost:8001/documents');
       if (response.ok) {
         const data = await response.json();
         setDocuments(data);
@@ -51,7 +51,7 @@ export default function DocsPage() {
   // 获取统计信息
   const fetchStats = async () => {
     try {
-      const response = await fetch('http://172.27.78.67:8001/documents/stats');
+      const response = await fetch('http://localhost:8001/documents/stats');
       if (response.ok) {
         const data = await response.json();
         setStats(data);
@@ -109,7 +109,7 @@ export default function DocsPage() {
       }
       formData.append('process', 'true');
 
-      const response = await fetch('http://172.27.78.67:8001/upload', {
+      const response = await fetch('http://localhost:8001/upload', {
         method: 'POST',
         body: formData,
       });
@@ -143,7 +143,7 @@ export default function DocsPage() {
     }
 
     try {
-      const response = await fetch(`http://172.27.78.67:8001/documents/${fileId}`, {
+      const response = await fetch(`http://localhost:8001/documents/${fileId}`, {
         method: 'DELETE',
       });
 

@@ -4,28 +4,34 @@
 
 在WSL环境中运行的服务可以通过特定的IP地址从Windows主机访问。以下是详细的访问指南：
 
-## 📍 当前WSL IP地址
+## 📍 访问方式
 
-**WSL IP地址**: `172.27.78.67`
+### 方式1: Localhost访问（推荐）
+**适用场景**: 服务绑定到 `0.0.0.0`，WSL2环境
+**访问地址**: `localhost`
+
+### 方式2: WSL IP地址访问
+**适用场景**: 需要明确IP地址，或WSL1环境
+**获取IP**: 运行 `ip addr show eth0 | grep inet` 查看实际IP
 
 ## 🔗 访问地址
 
 ### 后端API服务
-- **健康检查**: http://172.27.78.67:8001/healthz
-- **API文档**: http://172.27.78.67:8001/docs
-- **查询API**: http://172.27.78.67:8001/query
-- **流式API**: http://172.27.78.67:8001/stream
+- **健康检查**: http://localhost:8001/healthz
+- **API文档**: http://localhost:8001/docs
+- **查询API**: http://localhost:8001/query
+- **流式API**: http://localhost:8001/stream
 
 ### 前端Web界面
-- **主页面**: http://172.27.78.67:3000
-- **聊天界面**: http://172.27.78.67:3000/chat
+- **主页面**: http://localhost:3000
+- **聊天界面**: http://localhost:3000/chat
 
 ## 🚀 快速验证
 
 ### 1. 验证后端服务
 在Windows浏览器或PowerShell中访问：
 ```
-http://172.27.78.67:8001/healthz
+http://localhost:8001/healthz
 ```
 
 应该返回：
@@ -42,7 +48,7 @@ http://172.27.78.67:8001/healthz
 ### 2. 验证前端界面
 在Windows浏览器中访问：
 ```
-http://172.27.78.67:3000/chat
+http://localhost:3000/chat
 ```
 
 应该看到RAG知识库机器人的聊天界面。
@@ -52,13 +58,13 @@ http://172.27.78.67:3000/chat
 ### 检查后端服务
 ```bash
 # 在WSL中执行
-curl http://172.27.78.67:8001/healthz
+curl http://localhost:8001/healthz
 ```
 
 ### 检查前端服务
 ```bash
 # 在WSL中执行
-curl -I http://172.27.78.67:3000
+curl -I http://localhost:3000
 ```
 
 ### 查看运行进程
@@ -67,50 +73,52 @@ curl -I http://172.27.78.67:3000
 ps aux | grep -E "uvicorn|next" | grep -v grep
 ```
 
-## 🔄 服务重启指南
+## 🔗 WSL IP备用方案
 
-如果服务未运行，可以按以下步骤重启：
+如果localhost无法访问，可以使用WSL的实际IP：
 
-### 重启后端服务
 ```bash
-cd /mnt/d/codex/rag-chatbot/server
-source .venv/bin/activate
+# 获取WSL IP地址
+WSL_IP=$(ip addr show eth0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
+echo "WSL IP: $WSL_IP"
+
+# 使用WSL IP访问
+# 后端: http://$WSL_IP:8001/healthz
+# 前端: http://$WSL_IP:3000/chat
+```
+
+## 🚀 启动命令
+
+### 方式1: 一键启动（推荐）
+```bash
+cd /mnt/d/codex/rag-chatbot
+./start.sh
+```
+
+### 方式2: 手动启动
+```bash
+# 启动后端
+# 启动后端
+cd server && source .venv/bin/activate
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+
+# 启动前端（新终端）
+cd web && pnpm dev --hostname 0.0.0.0 --port 3000
 ```
-
-### 重启前端服务
-```bash
-cd /mnt/d/codex/rag-chatbot/web
-pnpm dev --hostname 0.0.0.0 --port 3000
-```
-
-## 🌐 网络配置说明
-
-### WSL网络模式
-WSL使用虚拟网络适配器，IP地址通常格式为：`172.x.x.x`
-
-### 查看WSL IP地址
-```bash
-# 在WSL中执行
-ip addr show eth0 | grep inet
-```
-
-### Windows主机访问
-Windows主机可以通过WSL的IP地址访问WSL中的服务，无需额外配置。
 
 ## ⚠️ 注意事项
 
-1. **防火墙设置**: 确保Windows防火墙允许访问相应端口
-2. **服务绑定**: 服务必须绑定到 `0.0.0.0` 而不仅仅是 `localhost`
-3. **IP地址变化**: WSL IP地址可能会在重启后变化，需要重新检查
-4. **服务依赖**: 确保后端服务已启动再访问前端
+1. **服务绑定**: 确保服务绑定到 `0.0.0.0` 而不仅仅是 `localhost`
+2. **防火墙设置**: Windows防火墙需要允许访问相应端口
+3. **WSL版本**: WSL2推荐使用localhost，WSL1可能需要具体IP
+4. **端口占用**: 确保8001和3000端口未被其他服务占用
 
 ## 🔍 故障排除
 
-### 无法访问服务
+### localhost无法访问
 1. 检查服务是否在WSL中正常运行
-2. 确认IP地址是否正确
-3. 检查服务是否绑定到 `0.0.0.0`
+2. 确认服务绑定到 `0.0.0.0`
+3. 尝试使用WSL的实际IP地址
 4. 检查Windows防火墙设置
 
 ### 连接超时
@@ -129,7 +137,10 @@ Windows主机可以通过WSL的IP地址访问WSL中的服务，无需额外配�
 1. WSL版本和配置
 2. Windows网络设置
 3. 服务运行日志
+4. 尝试使用WSL IP作为备用方案
 
 ---
 
-**现在您可以从Windows主机访问WSL中的RAG知识库机器人系统了！🎉**
+**现在您可以从Windows主机使用localhost访问WSL中的RAG知识库机器人系统了！🎉**
+
+推荐使用localhost访问，如果遇到问题再考虑使用WSL IP地址。
