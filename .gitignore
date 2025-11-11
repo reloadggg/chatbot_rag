@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+*/node_modules/
+server/.venv/
+server/uploads/
+server/*.log
+server/*.pid
+server/.coverage
+server/.pytest_cache/
+server/.ruff_cache/
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Next.js
+web/.next/
+web/out/
+web/*.log
+web/*.pid
+web/.cache/
+web/.swc/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+
+# Temporary files
+*.tmp
+*.temp
