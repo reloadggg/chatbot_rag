@@ -8,7 +8,7 @@
 
 - **前端**：Next.js + Tailwind，提供聊天界面和知识库管理
 - **后端**：FastAPI + LangChain，实现RAG流程和文件处理
-- **模型**：全部使用在线API（OpenAI / 302.ai / Qdrant Cloud等）
+- **模型**：全部使用在线API（OpenAI /openrouter / Qdrant Cloud等）
 - **配置**：通过`.env`动态控制模型、向量库、参数
 - **特性**：SSE流式输出、中文提示、文件上传、知识库管理
 
