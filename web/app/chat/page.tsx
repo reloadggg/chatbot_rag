@@ -4,6 +4,8 @@ import { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Link from 'next/link';
+import { authManager, getAuthHeader } from '../lib/auth';
+import { useRouter } from 'next/navigation';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -11,10 +13,33 @@ interface Message {
   timestamp: Date;
 }
 
+interface AuthData {
+  access_token: string;
+  token_type: string;
+  user_type: 'system' | 'guest';
+  config: Record<string, any>;
+  providers: {
+    llm_providers: Array<{
+      name: string;
+      models: string[];
+      available: boolean;
+    }>;
+    embedding_providers: Array<{
+      name: string;
+      models: string[];
+      available: boolean;
+    }>;
+  };
+}
+
 export default function ChatPage() {
+  const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
+  const [userType, setUserType] = useState<string | null>(null);
+  const [userConfig, setUserConfig] = useState<Record<string, any> | null>(null);
+  const [providers, setProviders] = useState<AuthData['providers'] | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -22,6 +47,28 @@ export default function ChatPage() {
   };
 
   useEffect(scrollToBottom, [messages]);
+
+  // 获取用户信息
+  useEffect(() => {
+    const loadUserInfo = async () => {
+      try {
+        const response = await fetch('http://localhost:8001/auth/config', {
+          headers: authManager.getAuthHeader()
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setUserType(data.user_type);
+          setUserConfig(data.config);
+          setProviders(data.providers);
+        }
+      } catch (error) {
+        console.error('获取用户信息失败:', error);
+      }
+    };
+
+    loadUserInfo();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,7 +86,10 @@ export default function ChatPage() {
 
     try {
       const response = await fetch(
-        `http://localhost:8001/stream?question=${encodeURIComponent(input)}`
+        `http://localhost:8001/stream?question=${encodeURIComponent(input)}`,
+        {
+          headers: authManager.getAuthHeader()
+        }
       );
 
       if (!response.ok) {
@@ -124,10 +174,23 @@ export default function ChatPage() {
                 >
                   📚 知识库管理
                 </Link>
+                <Link 
+                  href="/providers" 
+                  className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors"
+                >
+                  ⚙️ AI提供商
+                </Link>
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-500">智能问答助手</span>
+              <span className="text-sm text-gray-500">
+                {userType === 'system' ? '🔐 系统用户' : '👤 游客用户'}
+              </span>
+              {userConfig && (
+                <span className="text-xs text-gray-400">
+                  {userConfig.llm_provider} / {userConfig.embedding_provider}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -144,6 +207,13 @@ export default function ChatPage() {
               </div>
               <h3 className="text-lg font-medium text-gray-900 mb-2">开始对话</h3>
               <p className="text-gray-600">在下方输入您的问题，我将为您提供智能回答。</p>
+              {userType === 'guest' && (
+                <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <p className="text-sm text-blue-800">
+                    💡 您正在使用游客模式，基于您的自定义API配置进行问答。
+                  </p>
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-6">

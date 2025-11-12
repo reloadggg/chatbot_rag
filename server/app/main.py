@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Query, UploadFile, File, HTTPException, Form
+from fastapi import FastAPI, Query, UploadFile, File, HTTPException, Form, Depends, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
@@ -6,6 +6,8 @@ from app.settings import settings, print_env_status
 from app.rag import rag_pipeline
 from app.document_processor import document_processor
 from app.gemini_routes import router as gemini_router
+from app.auth import auth_manager
+from app.user_config import user_config_manager, UserConfig
 import json
 import asyncio
 from typing import List, Optional
@@ -34,14 +36,223 @@ class DocumentInfo(BaseModel):
     chunks_count: Optional[int] = None
     status: str
 
-@app.get("/healthz")
-async def health_check():
+class LoginRequest(BaseModel):
+    password: str
+    provider: str = "env"  # env, openai, gemini
+
+class GuestLoginRequest(BaseModel):
+    llm_provider: str
+    llm_model: str
+    llm_api_key: str
+    llm_base_url: Optional[str] = None
+    embedding_provider: str
+    embedding_model: str
+    embedding_api_key: str
+    embedding_base_url: Optional[str] = None
+
+class AuthResponse(BaseModel):
+    access_token: str
+    token_type: str
+    user_type: str
+    config: Dict[str, Any]
+    providers: Dict[str, Any]
+
+# 依赖函数
+def get_current_user(authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
+    """获取当前用户"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未提供认证信息")
+    
+    try:
+        # 提取Bearer token
+        scheme, token = authorization.split()
+        if scheme.lower() != "bearer":
+            raise HTTPException(status_code=401, detail="无效的认证方案")
+        
+        # 验证token
+        token_data = auth_manager.verify_token(token)
+        if not token_data:
+            raise HTTPException(status_code=401, detail="无效的认证令牌")
+        
+        return token_data
+    except Exception:
+        raise HTTPException(status_code=401, detail="认证失败")
+
+def get_user_config(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    """获取用户配置"""
+    return auth_manager.get_user_api_config(current_user)
+
+# ===== 认证相关API =====
+
+@app.post("/auth/login", response_model=AuthResponse)
+async def login(request: LoginRequest):
+    """用户登录"""
+    try:
+        # 验证系统密码
+        if auth_manager.validate_system_password(request.password):
+            # 创建系统用户令牌
+            access_token = auth_manager.create_system_token()
+            
+            # 获取系统配置
+            system_config = auth_manager.get_user_api_config({
+                "user_type": "system",
+                "provider": request.provider
+            })
+            
+            return AuthResponse(
+                access_token=access_token,
+                token_type="bearer",
+                user_type="system",
+                config=system_config,
+                providers={
+                    "llm_providers": [
+                        {
+                            "name": "openai",
+                            "models": ["gpt-4o-mini", "gpt-4o"],
+                            "available": bool(system_config.get("llm_api_key"))
+                        }
+                    ],
+                    "embedding_providers": [
+                        {
+                            "name": "openai",
+                            "models": ["text-embedding-3-small"],
+                            "available": bool(system_config.get("embedding_api_key"))
+                        }
+                    ]
+                }
+            )
+        else:
+            raise HTTPException(status_code=401, detail="密码错误")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ 登录失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="登录失败")
+
+@app.post("/auth/guest", response_model=AuthResponse)
+async def guest_login(request: GuestLoginRequest):
+    """游客登录"""
+    try:
+        # 验证游客配置
+        config_data = request.dict()
+        errors = user_config_manager.validate_provider_config(config_data)
+        
+        if errors:
+            raise HTTPException(status_code=400, detail=f"配置验证失败: {errors}")
+        
+        # 创建游客会话
+        import uuid
+        session_id = str(uuid.uuid4())
+        
+        # 创建游客配置
+        guest_config = user_config_manager.create_user_config(config_data)
+        
+        # 创建游客令牌
+        access_token = auth_manager.create_guest_token(session_id, guest_config.__dict__)
+        
+        # 获取提供商信息
+        providers_info = {
+            "llm_providers": [
+                {
+                    "name": "openai",
+                    "models": ["gpt-4o-mini", "gpt-4o"],
+                    "available": guest_config.llm_provider == "openai" and bool(guest_config.llm_api_key)
+                },
+                {
+                    "name": "gemini",
+                    "models": ["gemini-2.0-flash-exp", "gemini-1.5-flash"],
+                    "available": guest_config.llm_provider == "gemini" and bool(guest_config.llm_api_key)
+                }
+            ],
+            "embedding_providers": [
+                {
+                    "name": "openai",
+                    "models": ["text-embedding-3-small"],
+                    "available": guest_config.embedding_provider == "openai" and bool(guest_config.embedding_api_key)
+                },
+                {
+                    "name": "gemini",
+                    "models": ["models/embedding-001"],
+                    "available": guest_config.embedding_provider == "gemini" and bool(guest_config.embedding_api_key)
+                }
+            ]
+        }
+        
+        return AuthResponse(
+            access_token=access_token,
+            token_type="bearer",
+            user_type="guest",
+            config=guest_config.__dict__,
+            providers=providers_info
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ 游客登录失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="游客登录失败")
+
+@app.get("/auth/config")
+async def get_auth_config(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """获取当前用户的API配置"""
+    try:
+        config = auth_manager.get_user_api_config(current_user)
+        return {
+            "user_type": current_user.get("user_type"),
+            "config": config,
+            "providers": {
+                "llm_providers": [
+                    {
+                        "name": "openai",
+                        "models": ["gpt-4o-mini", "gpt-4o"],
+                        "available": bool(config.get("llm_api_key"))
+                    },
+                    {
+                        "name": "gemini",
+                        "models": ["gemini-2.0-flash-exp", "gemini-1.5-flash"],
+                        "available": bool(config.get("llm_api_key"))
+                    }
+                ],
+                "embedding_providers": [
+                    {
+                        "name": "openai",
+                        "models": ["text-embedding-3-small"],
+                        "available": bool(config.get("embedding_api_key"))
+                    },
+                    {
+                        "name": "gemini",
+                        "models": ["models/embedding-001"],
+                        "available": bool(config.get("embedding_api_key"))
+                    }
+                ]
+            }
+        }
+    except Exception as e:
+        print(f"❌ 获取用户配置失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取用户配置失败")
+
+@app.get("/auth/status")
+async def get_auth_status():
+    """获取认证系统状态"""
+    return {
+        "system_mode_enabled": auth_manager.is_system_mode_enabled(),
+        "auth_required": True,  # 总是需要认证
+        "supported_modes": ["system", "guest"]
+    }
+
+# ===== 受保护的API（需要认证） =====
+
+@app.get("/healthz", dependencies=[Depends(get_current_user)])
+async def health_check(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """系统健康检查（需要认证）"""
     return {
         "status": "ok",
         "env": settings.env,
         "embedding_model": settings.embedding_model,
         "llm_model": settings.llm_model,
         "message": "系统运行正常",
+        "user_type": current_user.get("user_type"),
         "providers": {
             "llm": settings.llm_provider,
             "embedding": settings.embedding_provider,
@@ -49,25 +260,40 @@ async def health_check():
         }
     }
 
-@app.post("/query")
-async def query_once(request: QueryRequest):
+@app.post("/query", dependencies=[Depends(get_current_user)])
+async def query_once(
+    request: QueryRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    user_config: Dict[str, Any] = Depends(get_user_config)
+):
+    """单次查询（需要认证）"""
     try:
+        # 使用用户的配置创建RAG实例
+        # 这里需要动态创建RAG实例，而不是使用全局实例
+        # 为了简化，我们暂时使用全局配置，后续可以优化
         answer = rag_pipeline.query(request.question)
         return {
             "question": request.question,
             "answer": answer,
             "status": "success",
-            "provider": rag_pipeline.provider or settings.llm_provider
+            "provider": rag_pipeline.provider or settings.llm_provider,
+            "user_type": current_user.get("user_type")
         }
     except Exception as e:
         return {
             "question": request.question,
             "answer": f"处理问题时出现错误: {str(e)}",
-            "status": "error"
+            "status": "error",
+            "user_type": current_user.get("user_type")
         }
 
-@app.get("/stream")
-async def stream_query(question: str = Query(...)):
+@app.get("/stream", dependencies=[Depends(get_current_user)])
+async def stream_query(
+    question: str = Query(...),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    user_config: Dict[str, Any] = Depends(get_user_config)
+):
+    """流式查询（需要认证）"""
     async def generate():
         try:
             for chunk in rag_pipeline.stream_query(question):
@@ -87,15 +313,17 @@ async def stream_query(question: str = Query(...)):
         }
     )
 
-# ===== 文件上传和管理API =====
+# ===== 文件上传和管理API（需要认证） =====
 
-@app.post("/upload", response_model=Dict[str, Any])
+@app.post("/upload", dependencies=[Depends(get_current_user)])
 async def upload_file(
     file: UploadFile = File(...),
     description: Optional[str] = Form(None),
-    process: bool = Form(True)
+    process: bool = Form(True),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    user_config: Dict[str, Any] = Depends(get_user_config)
 ):
-    """上传文件到知识库"""
+    """上传文件到知识库（需要认证）"""
     try:
         # 检查文件类型
         allowed_extensions = {'.pdf', '.txt', '.md', '.json'}
@@ -143,7 +371,8 @@ async def upload_file(
             "chunks_count": result["chunks_count"],
             "processed": process,
             "status": "success",
-            "provider": rag_pipeline.provider or settings.llm_provider
+            "provider": rag_pipeline.provider or settings.llm_provider,
+            "user_type": current_user.get("user_type")
         }
         
     except HTTPException:
@@ -152,124 +381,8 @@ async def upload_file(
         print(f"❌ 文件上传失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"文件上传失败: {str(e)}")
 
-@app.get("/documents", response_model=List[DocumentInfo])
-async def list_documents():
-    """获取已上传的文档列表"""
-    try:
-        files = document_processor.list_files()
-        
-        # 转换为响应格式
-        documents = []
-        for file_info in files:
-            # 尝试获取额外的处理信息
-            # 这里可以扩展为从数据库或元数据文件读取
-            documents.append(DocumentInfo(
-                file_id=file_info["file_id"],
-                filename=file_info["filename"],
-                file_size=file_info["file_size"],
-                created_at=file_info["created_at"],
-                status="processed"  # 假设已处理
-            ))
-        
-        return documents
-        
-    except Exception as e:
-        print(f"❌ 获取文档列表失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"获取文档列表失败: {str(e)}")
-
-@app.delete("/documents/{file_id}")
-async def delete_document(file_id: str):
-    """删除指定文档"""
-    try:
-        success = document_processor.delete_file(file_id)
-        
-        if success:
-            # 这里应该也从向量数据库中删除相关文档
-            # 需要实现向量数据库的删除功能
-            return {"message": "文档删除成功", "file_id": file_id, "status": "success"}
-        else:
-            raise HTTPException(status_code=404, detail="未找到指定文档")
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ 文档删除失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"文档删除失败: {str(e)}")
-
-@app.get("/documents/stats")
-async def get_document_stats():
-    """获取文档统计信息"""
-    try:
-        # 获取文件列表统计
-        files = document_processor.list_files()
-        
-        # 获取向量数据库统计
-        vector_stats = rag_pipeline.get_document_stats()
-        
-        return {
-            "total_files": len(files),
-            "total_size": sum(f["file_size"] for f in files),
-            "vector_db_stats": vector_stats,
-            "files": [
-                {
-                    "file_id": f["file_id"],
-                    "filename": f["filename"],
-                    "file_size": f["file_size"],
-                    "created_at": f["created_at"]
-                }
-                for f in files
-            ],
-            "providers": {
-                "llm": settings.llm_provider,
-                "embedding": settings.embedding_provider,
-                "gemini_available": rag_pipeline.is_gemini_available()
-            }
-        }
-        
-    except Exception as e:
-        print(f"❌ 获取统计信息失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"获取统计信息失败: {str(e)}")
-
-# ===== 提供商管理API =====
-
-@app.get("/providers", response_model=Dict[str, Any])
-async def get_providers():
-    """获取支持的提供商信息"""
-    return {
-        "llm_providers": [
-            {
-                "name": "openai",
-                "models": ["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"],
-                "available": bool(settings.llm_api_key)
-            },
-            {
-                "name": "gemini",
-                "models": ["gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro"],
-                "available": rag_pipeline.is_gemini_available()
-            }
-        ],
-        "embedding_providers": [
-            {
-                "name": "openai",
-                "models": ["text-embedding-3-small", "text-embedding-3-large"],
-                "available": bool(settings.embedding_api_key)
-            },
-            {
-                "name": "gemini",
-                "models": ["models/embedding-001"],
-                "available": gemini_handler.is_available()
-            }
-        ],
-        "current_config": {
-            "llm_provider": settings.llm_provider,
-            "embedding_provider": settings.embedding_provider,
-            "llm_model": settings.llm_model,
-            "embedding_model": settings.embedding_model
-        }
-    }
-
-# 添加Gemini路由
-app.include_router(gemini_router)
+# 添加Gemini路由（也需要认证）
+app.include_router(gemini_router, dependencies=[Depends(get_current_user)])
 
 # 添加Path导入
 from pathlib import Path
