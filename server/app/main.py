@@ -82,6 +82,29 @@ def get_user_config(current_user: Dict[str, Any] = Depends(get_current_user)) ->
     """获取用户配置"""
     return auth_manager.get_user_api_config(current_user)
 
+def get_current_user_optional(authorization: Optional[str] = Header(None)) -> Optional[Dict[str, Any]]:
+    """尽量获取当前用户，失败返回None"""
+    if not authorization:
+        return None
+    try:
+        scheme, token = authorization.split()
+        if scheme.lower() != "bearer":
+            return None
+        return auth_manager.verify_token(token)
+    except Exception:
+        return None
+
+def get_current_user_optional(authorization: Optional[str] = Header(None)) -> Optional[Dict[str, Any]]:
+    if not authorization:
+        return None
+    try:
+        scheme, token = authorization.split()
+        if scheme.lower() != "bearer":
+            return None
+        return auth_manager.verify_token(token)
+    except Exception:
+        return None
+
 # ===== 认证相关API =====
 
 @app.post("/auth/login", response_model=AuthResponse)
@@ -240,6 +263,47 @@ async def get_auth_status():
         "auth_required": True,  # 总是需要认证
         "supported_modes": ["system", "guest"]
     }
+
+@app.get("/providers")
+async def get_providers(current_user: Optional[Dict[str, Any]] = Depends(get_current_user_optional)):
+    """获取AI提供商信息（游客可访问）"""
+    try:
+        base_config = auth_manager.get_user_api_config(current_user or {"user_type": "guest"})
+        return {
+            "llm_providers": [
+                {
+                    "name": "openai",
+                    "models": ["gpt-4o-mini", "gpt-4o"],
+                    "available": bool(base_config.get("llm_api_key"))
+                },
+                {
+                    "name": "gemini",
+                    "models": ["gemini-2.0-flash-exp", "gemini-1.5-flash"],
+                    "available": bool(base_config.get("llm_api_key"))
+                }
+            ],
+            "embedding_providers": [
+                {
+                    "name": "openai",
+                    "models": ["text-embedding-3-small"],
+                    "available": bool(base_config.get("embedding_api_key"))
+                },
+                {
+                    "name": "gemini",
+                    "models": ["models/embedding-001"],
+                    "available": bool(base_config.get("embedding_api_key"))
+                }
+            ],
+            "current_config": {
+                "llm_provider": base_config.get("llm_provider"),
+                "llm_model": base_config.get("llm_model"),
+                "embedding_provider": base_config.get("embedding_provider"),
+                "embedding_model": base_config.get("embedding_model"),
+            }
+        }
+    except Exception as e:
+        print(f"❌ 获取提供商信息失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取提供商信息失败")
 
 # ===== 受保护的API（需要认证） =====
 
