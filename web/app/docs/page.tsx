@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { apiUrl } from '../../lib/api';
 
 interface Document {
@@ -37,7 +37,7 @@ export default function DocsPage() {
   const supportedTypes = ['.pdf', '.txt', '.md', '.json'];
 
   // 获取文档列表
-  const fetchDocuments = async () => {
+  const fetchDocuments = useCallback(async () => {
     try {
       const response = await fetch(apiUrl('/documents'));
       if (response.ok) {
@@ -47,10 +47,10 @@ export default function DocsPage() {
     } catch (error) {
       console.error('获取文档列表失败:', error);
     }
-  };
+  }, []);
 
   // 获取统计信息
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       const response = await fetch(apiUrl('/documents/stats'));
       if (response.ok) {
@@ -60,17 +60,17 @@ export default function DocsPage() {
     } catch (error) {
       console.error('获取统计信息失败:', error);
     }
-  };
-
-  useEffect(() => {
-    loadData();
   }, []);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setIsLoading(true);
     await Promise.all([fetchDocuments(), fetchStats()]);
     setIsLoading(false);
-  };
+  }, [fetchDocuments, fetchStats]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // 文件选择处理
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
