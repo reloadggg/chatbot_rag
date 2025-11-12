@@ -33,6 +33,20 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", extra="allow")
 
+    def model_post_init(self, __context):
+        self.llm_base_url = self._normalize_base_url(self.llm_base_url, "chat/completions")
+        self.embedding_base_url = self._normalize_base_url(self.embedding_base_url, "embeddings")
+
+    @staticmethod
+    def _normalize_base_url(base_url: str, endpoint_suffix: str) -> str:
+        if not base_url:
+            return ""
+        cleaned = base_url.rstrip("/")
+        suffix = "/" + endpoint_suffix.strip("/")
+        if cleaned.endswith(suffix):
+            cleaned = cleaned[: -len(suffix)]
+        return cleaned
+
 settings = Settings()
 
 def print_env_status():
