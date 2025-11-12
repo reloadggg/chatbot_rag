@@ -25,19 +25,19 @@ LLM_API_KEY=sk-your-openai-api-key-here
 LLM_BASE_URL=https://api.openai.com/v1
 ```
 
-### 2. 302.ai 配置（国内推荐）
+### 2. 其他OpenAI兼容API配置
 ```env
 # 嵌入模型配置
 EMBEDDING_PROVIDER=openai
 EMBEDDING_MODEL=text-embedding-3-small
-EMBEDDING_API_KEY=your-302ai-api-key
-EMBEDDING_BASE_URL=https://api.302.ai/v1
+EMBEDDING_API_KEY=your-api-key
+EMBEDDING_BASE_URL=https://your-api-provider.com/v1
 
 # 语言模型配置
 LLM_PROVIDER=openai
 LLM_MODEL=gpt-4o-mini
-LLM_API_KEY=your-302ai-api-key
-LLM_BASE_URL=https://api.302.ai/v1
+LLM_API_KEY=your-api-key
+LLM_BASE_URL=https://your-api-provider.com/v1
 ```
 
 ### 3. Azure OpenAI 配置

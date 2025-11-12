@@ -70,7 +70,7 @@ rag-chatbot/
 |------|------|
 | **后端** | FastAPI、LangChain、LangChain-OpenAI、Chroma或Qdrant |
 | **前端** | Next.js、React、Tailwind CSS |
-| **模型** | 在线API（OpenAI / Gemini / 302.ai） |
+| **模型** | 在线API（OpenAI / Gemini） |
 | **嵌入** | text-embedding-3-small（或同类） |
 | **语言模型** | gpt-4o-mini / Gemini系列 |
 | **数据库** | 本地Chroma或Qdrant Cloud |
@@ -153,7 +153,7 @@ pnpm dev --hostname 0.0.0.0 --port 3000
 ### 🔧 系统管理
 - **可配置模型参数** - 通过.env文件灵活配置
 - **支持多种向量数据库** - Chroma/Qdrant可选
-- **支持多种AI提供商** - OpenAI / Gemini / 302.ai
+- **支持多种AI提供商** - OpenAI / Gemini
 - **完整的测试覆盖** - 92%代码测试覆盖率
 - **代码质量保证** - 通过ruff检查和格式化
 
