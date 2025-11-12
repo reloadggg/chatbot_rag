@@ -11,3 +11,4 @@ qdrant-client>=1.15.0
 PyPDF2>=3.0.1
 langchain-google-genai>=2.1.12
 langchain-text-splitters>=1.0.0
+python-multipart>=0.0.9
