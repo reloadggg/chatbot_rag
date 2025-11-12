@@ -1,0 +1,13 @@
+server/.venv
+web/node_modules
+**/__pycache__
+*.pyc
+.pytest_cache
+server/data/chroma/**
+server/uploads/**
+*.pid
+server/.env
+web/.env.local
+.DS_Store
+start.sh
+start_simple.sh

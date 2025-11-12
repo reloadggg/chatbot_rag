@@ -155,6 +155,41 @@ pnpm lint
 
 如需自动修复，可结合 `pnpm lint --fix` 与 `ruff format`。
 
+## 🐳 Docker 部署
+
+项目内置 `docker-compose.yml`，可在一台服务器上快速跑起 FastAPI（backend）与 Next.js（frontend）：
+
+```bash
+# 1. 准备配置
+cp server/.env.example server/.env
+cp web/.env.local.example web/.env.local  # 若需自定义
+# 在 server/.env 写入真实模型 key（硅基流动 / OpenAI / Gemini 等）
+# 在 web/.env.local 设置 NEXT_PUBLIC_API_URL=http://backend:8000
+
+# 2. 一键构建 + 启动
+docker compose up --build -d
+```
+
+默认映射端口：`8000`（后端）与 `3000`（前端）。后台容器会挂载本地 `server/data` 与 `server/uploads`，方便持久化知识库。
+
+常用命令：
+
+```bash
+docker compose logs -f backend      # 查看 FastAPI 中文日志
+docker compose logs -f frontend
+docker compose exec backend ruff check app
+docker compose down                 # 停止并删除容器
+```
+
+如需仅部署后端，可直接使用 `server/Dockerfile` 构建镜像：
+
+```bash
+docker build -f server/Dockerfile -t rag-backend .
+docker run --env-file server/.env -p 8000:8000 rag-backend
+```
+
+前端镜像则使用 `web/Dockerfile`，运行时记得传入 `NEXT_PUBLIC_API_URL` 指向后端地址。 
+
 ## 📋 核心功能
 
 ### 💬 智能问答
