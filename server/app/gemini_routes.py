@@ -1,11 +1,14 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Form
-from fastapi.responses import JSONResponse
-from typing import List, Optional, Dict, Any
-from app.gemini_handler import gemini_handler
-import tempfile
-import os
-from pathlib import Path
 import mimetypes
+import os
+import tempfile
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import google.generativeai as genai
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi.responses import JSONResponse
+
+from app.gemini_handler import gemini_handler
 
 router = APIRouter(prefix="/gemini", tags=["Gemini"])
 

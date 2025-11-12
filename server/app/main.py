@@ -10,7 +10,7 @@ from app.auth import auth_manager
 from app.user_config import user_config_manager, UserConfig
 import json
 import asyncio
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from pathlib import Path
 
 app = FastAPI(title=settings.app_name)
