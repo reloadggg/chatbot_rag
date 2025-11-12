@@ -10,8 +10,6 @@ services:
     volumes:
       - ./server/data:/app/data
       - ./server/uploads:/app/uploads
-    ports:
-      - "8000:8000"
     restart: unless-stopped
 
   frontend:
@@ -21,9 +19,18 @@ services:
     env_file:
       - web/.env.local
     environment:
-      - NEXT_PUBLIC_API_URL=http://backend:8000
+      - NEXT_PUBLIC_API_URL=/api
     depends_on:
       - backend
+    restart: unless-stopped
+
+  proxy:
+    image: nginx:1.27-alpine
+    depends_on:
+      - frontend
+      - backend
+    volumes:
+      - ./deploy/nginx/default.conf:/etc/nginx/nginx.conf:ro
     ports:
-      - "3000:3000"
+      - "3000:80"
     restart: unless-stopped
