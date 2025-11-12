@@ -2,8 +2,11 @@ FROM node:20-alpine AS base
 
 WORKDIR /app
 
+ARG NEXT_PUBLIC_API_URL=/api
+
 ENV NODE_ENV=production \
-    NEXT_TELEMETRY_DISABLED=1
+    NEXT_TELEMETRY_DISABLED=1 \
+    NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 
 RUN corepack enable
 

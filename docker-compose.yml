@@ -16,6 +16,8 @@ services:
     build:
       context: .
       dockerfile: web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: /api
     env_file:
       - web/.env.local
     environment:

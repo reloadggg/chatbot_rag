@@ -168,6 +168,7 @@ cp server/.env.example server/.env
 cp web/.env.local.example web/.env.local  # 若需自定义
 # 在 server/.env 写入真实模型 key（硅基流动 / OpenAI / Gemini 等）
 # 在 web/.env.local 设置 NEXT_PUBLIC_API_URL=/api （Docker 部署走统一代理）
+# Docker 镜像构建时也会通过 NEXT_PUBLIC_API_URL=/api 写入前端 bundle
 
 # 2. 一键构建 + 启动
 docker compose up --build -d
