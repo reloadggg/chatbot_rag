@@ -5,9 +5,11 @@ from pydantic import BaseModel
 from app.settings import settings, print_env_status
 from app.rag import rag_pipeline
 from app.document_processor import document_processor
+from app.gemini_routes import router as gemini_router
 import json
 import asyncio
 from typing import List, Optional
+from pathlib import Path
 
 app = FastAPI(title=settings.app_name)
 
@@ -39,7 +41,12 @@ async def health_check():
         "env": settings.env,
         "embedding_model": settings.embedding_model,
         "llm_model": settings.llm_model,
-        "message": "系统运行正常"
+        "message": "系统运行正常",
+        "providers": {
+            "llm": settings.llm_provider,
+            "embedding": settings.embedding_provider,
+            "gemini_available": rag_pipeline.is_gemini_available()
+        }
     }
 
 @app.post("/query")
@@ -49,7 +56,8 @@ async def query_once(request: QueryRequest):
         return {
             "question": request.question,
             "answer": answer,
-            "status": "success"
+            "status": "success",
+            "provider": rag_pipeline.provider or settings.llm_provider
         }
     except Exception as e:
         return {
@@ -134,7 +142,8 @@ async def upload_file(
             "text_length": result["text_length"],
             "chunks_count": result["chunks_count"],
             "processed": process,
-            "status": "success"
+            "status": "success",
+            "provider": rag_pipeline.provider or settings.llm_provider
         }
         
     except HTTPException:
@@ -209,12 +218,58 @@ async def get_document_stats():
                     "created_at": f["created_at"]
                 }
                 for f in files
-            ]
+            ],
+            "providers": {
+                "llm": settings.llm_provider,
+                "embedding": settings.embedding_provider,
+                "gemini_available": rag_pipeline.is_gemini_available()
+            }
         }
         
     except Exception as e:
         print(f"❌ 获取统计信息失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"获取统计信息失败: {str(e)}")
+
+# ===== 提供商管理API =====
+
+@app.get("/providers", response_model=Dict[str, Any])
+async def get_providers():
+    """获取支持的提供商信息"""
+    return {
+        "llm_providers": [
+            {
+                "name": "openai",
+                "models": ["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"],
+                "available": bool(settings.llm_api_key)
+            },
+            {
+                "name": "gemini",
+                "models": ["gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro"],
+                "available": rag_pipeline.is_gemini_available()
+            }
+        ],
+        "embedding_providers": [
+            {
+                "name": "openai",
+                "models": ["text-embedding-3-small", "text-embedding-3-large"],
+                "available": bool(settings.embedding_api_key)
+            },
+            {
+                "name": "gemini",
+                "models": ["models/embedding-001"],
+                "available": gemini_handler.is_available()
+            }
+        ],
+        "current_config": {
+            "llm_provider": settings.llm_provider,
+            "embedding_provider": settings.embedding_provider,
+            "llm_model": settings.llm_model,
+            "embedding_model": settings.embedding_model
+        }
+    }
+
+# 添加Gemini路由
+app.include_router(gemini_router)
 
 # 添加Path导入
 from pathlib import Path

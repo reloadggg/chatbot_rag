@@ -70,14 +70,26 @@ rag-chatbot/
 |------|------|
 | **后端** | FastAPI、LangChain、LangChain-OpenAI、Chroma或Qdrant |
 | **前端** | Next.js、React、Tailwind CSS |
-| **模型** | 在线API（OpenAI / 302.ai） |
+| **模型** | 在线API（OpenAI / Gemini / 302.ai） |
 | **嵌入** | text-embedding-3-small（或同类） |
-| **语言模型** | gpt-4o-mini（或等价模型） |
+| **语言模型** | gpt-4o-mini / Gemini系列 |
 | **数据库** | 本地Chroma或Qdrant Cloud |
 | **通信协议** | SSE（Server-Sent Events） |
-| **文件处理** | PyPDF2、文本分割器 |
+| **文件处理** | PyPDF2、文本分割器、Google Generative AI |
 
 ## 🚀 快速开始
+
+### 🆕 Gemini 支持（可选）
+系统现已支持 **Google Gemini** 作为AI提供商，提供原生文件搜索和多模态AI功能：
+
+```bash
+# 配置使用Gemini（可选）
+echo "GEMINI_API_KEY=your-gemini-api-key" >> server/.env
+echo "LLM_PROVIDER=gemini" >> server/.env
+echo "EMBEDDING_PROVIDER=gemini" >> server/.env
+
+# 获取Gemini API密钥: https://makersuite.google.com/app/apikey
+```
 
 ### 环境要求
 - Python 3.8+
@@ -141,6 +153,7 @@ pnpm dev --hostname 0.0.0.0 --port 3000
 ### 🔧 系统管理
 - **可配置模型参数** - 通过.env文件灵活配置
 - **支持多种向量数据库** - Chroma/Qdrant可选
+- **支持多种AI提供商** - OpenAI / Gemini / 302.ai
 - **完整的测试覆盖** - 92%代码测试覆盖率
 - **代码质量保证** - 通过ruff检查和格式化
 
@@ -164,6 +177,30 @@ DELETE /documents/{file_id}
 # 获取文档统计信息
 GET /documents/stats
 返回: 文档数量、总大小、向量统计等
+```
+
+### Gemini 原生支持API
+```bash
+# 上传文件到Gemini并进行智能问答
+POST /gemini/upload-file
+- 支持多格式：PDF、图片、文本等
+- 最大100MB
+- 支持多模态处理
+
+# 多文件智能处理
+POST /gemini/process-with-files
+- 最多10个文件
+- 支持问答、摘要、提取
+- 原生多模态AI处理
+
+# 获取Gemini配置信息
+GET /gemini/info
+- 配置状态
+- 功能列表
+
+# 获取可用模型
+GET /gemini/models
+- 支持的Gemini模型列表
 ```
 
 ## 🌐 访问地址
