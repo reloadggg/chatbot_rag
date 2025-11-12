@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Link from 'next/link';
 import { authManager, getAuthHeader } from '../lib/auth';
+import { apiUrl } from '../../lib/api';
 import { useRouter } from 'next/navigation';
 
 interface Message {
@@ -52,7 +53,7 @@ export default function ChatPage() {
   useEffect(() => {
     const loadUserInfo = async () => {
       try {
-        const response = await fetch('http://localhost:8001/auth/config', {
+        const response = await fetch(apiUrl('/auth/config'), {
           headers: authManager.getAuthHeader()
         });
 
@@ -86,7 +87,7 @@ export default function ChatPage() {
 
     try {
       const response = await fetch(
-        `http://localhost:8001/stream?question=${encodeURIComponent(input)}`,
+        apiUrl(`/stream?question=${encodeURIComponent(input)}`),
         {
           headers: authManager.getAuthHeader()
         }

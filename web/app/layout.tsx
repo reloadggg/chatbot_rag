@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { authManager, isAuthenticated, getUserType, logout } from './lib/auth'
+import { apiUrl } from '../lib/api'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -33,7 +34,7 @@ export default function RootLayout({
 
       // 验证token是否有效
       try {
-        const response = await fetch('http://localhost:8001/auth/config', {
+        const response = await fetch(apiUrl('/auth/config'), {
           headers: authManager.getAuthHeader()
         })
 

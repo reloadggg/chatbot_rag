@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { apiUrl } from '../../lib/api';
 
 interface Provider {
   name: string;
@@ -28,7 +29,7 @@ export default function ProvidersPage() {
   // 获取提供商信息
   const fetchProviders = async () => {
     try {
-      const response = await fetch('http://localhost:8001/providers');
+      const response = await fetch(apiUrl('/providers'));
       if (response.ok) {
         const data = await response.json();
         setProviders(data);

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { apiUrl } from '../../lib/api';
 
 interface AuthResponse {
   access_token: string;
@@ -51,7 +52,7 @@ export default function LoginPage() {
 
   const fetchAuthStatus = async () => {
     try {
-      const response = await fetch('http://localhost:8001/auth/status');
+      const response = await fetch(apiUrl('/auth/status'));
       if (response.ok) {
         const data = await response.json();
         setAuthStatus(data);
@@ -78,7 +79,7 @@ export default function LoginPage() {
     setError('');
 
     try {
-      const response = await fetch('http://localhost:8001/auth/login', {
+      const response = await fetch(apiUrl('/auth/login'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -123,7 +124,7 @@ export default function LoginPage() {
     setError('');
 
     try {
-      const response = await fetch('http://localhost:8001/auth/guest', {
+      const response = await fetch(apiUrl('/auth/guest'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
