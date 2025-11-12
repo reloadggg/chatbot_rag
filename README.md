@@ -164,19 +164,20 @@ pnpm lint
 cp server/.env.example server/.env
 cp web/.env.local.example web/.env.local  # 若需自定义
 # 在 server/.env 写入真实模型 key（硅基流动 / OpenAI / Gemini 等）
-# 在 web/.env.local 设置 NEXT_PUBLIC_API_URL=http://backend:8000
+# 在 web/.env.local 设置 NEXT_PUBLIC_API_URL=/api （Docker 部署走统一代理）
 
 # 2. 一键构建 + 启动
 docker compose up --build -d
 ```
 
-默认映射端口：`8000`（后端）与 `3000`（前端）。后台容器会挂载本地 `server/data` 与 `server/uploads`，方便持久化知识库。
+Compose 会启动三个服务：`backend`（FastAPI）、`frontend`（Next.js）、`proxy`（Nginx）。对外只暴露 `3000` 端口，由 Nginx 统一代理 `/`（前端）与 `/api`（后端），同时持久化挂载 `server/data`、`server/uploads`。
 
 常用命令：
 
 ```bash
 docker compose logs -f backend      # 查看 FastAPI 中文日志
 docker compose logs -f frontend
+docker compose logs -f proxy
 docker compose exec backend ruff check app
 docker compose down                 # 停止并删除容器
 ```
@@ -188,7 +189,7 @@ docker build -f server/Dockerfile -t rag-backend .
 docker run --env-file server/.env -p 8000:8000 rag-backend
 ```
 
-前端镜像则使用 `web/Dockerfile`，运行时记得传入 `NEXT_PUBLIC_API_URL` 指向后端地址。 
+前端镜像则使用 `web/Dockerfile`，若单独部署，记得在外部代理中把 `/api` 转发到后端服务。 
 
 ## 📋 核心功能
 
@@ -301,7 +302,8 @@ ALLOW_ORIGINS=http://localhost:3000
 
 ### 前端 (.env.local)
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:8001
+NEXT_PUBLIC_API_URL=http://localhost:8000  # 本地开发
+# Docker 部署可改为 NEXT_PUBLIC_API_URL=/api
 ```
 
 ## 📊 测试覆盖率
