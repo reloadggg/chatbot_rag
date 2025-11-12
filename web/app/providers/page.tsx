@@ -200,19 +200,19 @@ export default function ProvidersPage() {
                 <h2 className="text-xl font-semibold text-gray-900 mb-4">Google Gemini 特色功能</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="p-4 bg-blue-50 rounded-lg border">
-                    <h3 className="font-medium text-blue-900 mb-2">📝 文件搜索</h3>
+                    <h3 className="font-medium text-blue-900 mb-2">文件搜索</h3>
                     <p className="text-sm text-blue-800">上传PDF、图片等文件，基于内容进行智能问答</p>
                   </div>
                   <div className="p-4 bg-green-50 rounded-lg border">
-                    <h3 className="font-medium text-green-900 mb-2">🎨 多模态处理</h3>
+                    <h3 className="font-medium text-green-900 mb-2">多模态处理</h3>
                     <p className="text-sm text-green-800">支持文本、图片、PDF等多种格式的智能处理</p>
                   </div>
                   <div className="p-4 bg-purple-50 rounded-lg border">
-                    <h3 className="font-medium text-purple-900 mb-2">⚡ 高性能</h3>
+                    <h3 className="font-medium text-purple-900 mb-2">高性能</h3>
                     <p className="text-sm text-purple-800">支持大文件处理，响应速度快</p>
                   </div>
                   <div className="p-4 bg-orange-50 rounded-lg border">
-                    <h3 className="font-medium text-orange-900 mb-2">🛡️ 安全过滤</h3>
+                    <h3 className="font-medium text-orange-900 mb-2">安全过滤</h3>
                     <p className="text-sm text-orange-800">内置内容安全过滤，确保输出质量</p>
                   </div>
                 </div>
@@ -221,7 +221,7 @@ export default function ProvidersPage() {
                     href="/providers/gemini"
                     className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                   >
-                    🔗 访问Gemini功能
+                    访问Gemini功能
                   </Link>
                 </div>
               </div>

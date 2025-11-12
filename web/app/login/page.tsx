@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { apiUrl } from '../../lib/api';
+import { LockIcon, UserIcon } from '../../components/icons';
 
 interface AuthResponse {
   access_token: string;
@@ -246,7 +247,10 @@ export default function LoginPage() {
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                🔐 系统登录
+                <span className="inline-flex items-center justify-center gap-2">
+                  <LockIcon className="h-4 w-4" />
+                  系统登录
+                </span>
               </button>
               <button
                 onClick={() => handleAuthModeChange('guest')}
@@ -256,7 +260,10 @@ export default function LoginPage() {
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                👤 游客登录
+                <span className="inline-flex items-center justify-center gap-2">
+                  <UserIcon className="h-4 w-4" />
+                  游客登录
+                </span>
               </button>
             </div>
           </div>

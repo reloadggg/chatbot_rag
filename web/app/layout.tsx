@@ -5,8 +5,9 @@ import { Inter } from 'next/font/google'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { authManager, isAuthenticated, getUserType, logout } from './lib/auth'
+import { authManager, logout } from './lib/auth'
 import { apiUrl } from '../lib/api'
+import { BookIcon, ChatBubbleIcon, LockIcon, LogoutIcon, ProvidersIcon, UserIcon } from '../components/icons'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -19,6 +20,11 @@ export default function RootLayout({
   const [isAuth, setIsAuth] = useState(false)
   const [userType, setUserType] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const navLinks = [
+    { href: '/chat', label: '智能问答', icon: ChatBubbleIcon },
+    { href: '/docs', label: '知识库管理', icon: BookIcon },
+    { href: '/providers', label: 'AI提供商', icon: ProvidersIcon },
+  ]
 
   // 检查认证状态
   useEffect(() => {
@@ -104,35 +110,33 @@ export default function RootLayout({
                   RAG知识库机器人
                 </Link>
                 <div className="flex space-x-6">
-                  <Link 
-                    href="/chat" 
-                    className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors"
-                  >
-                    💬 智能问答
-                  </Link>
-                  <Link 
-                    href="/docs" 
-                    className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors"
-                  >
-                    📚 知识库管理
-                  </Link>
-                  <Link 
-                    href="/providers" 
-                    className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors"
-                  >
-                    ⚙️ AI提供商
-                  </Link>
+                  {navLinks.map(({ href, label, icon: Icon }) => (
+                    <Link
+                      key={href}
+                      href={href}
+                      className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors inline-flex items-center gap-2"
+                    >
+                      <Icon className="h-4 w-4 text-gray-500" />
+                      {label}
+                    </Link>
+                  ))}
                 </div>
               </div>
               <div className="flex items-center space-x-4">
-                <span className="text-sm text-gray-500">
-                  {userType === 'system' ? '🔐 系统用户' : '👤 游客用户'}
+                <span className="text-sm text-gray-500 inline-flex items-center gap-2">
+                  {userType === 'system' ? (
+                    <LockIcon className="h-4 w-4 text-gray-500" />
+                  ) : (
+                    <UserIcon className="h-4 w-4 text-gray-500" />
+                  )}
+                  {userType === 'system' ? '系统用户' : '游客用户'}
                 </span>
                 <button
                   onClick={handleLogout}
-                  className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors"
+                  className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors inline-flex items-center gap-2"
                 >
-                  🚪 退出登录
+                  <LogoutIcon className="h-4 w-4 text-gray-500" />
+                  退出登录
                 </button>
               </div>
             </div>

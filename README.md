@@ -136,6 +136,7 @@ uvicorn app.main:app --reload --port 8000
 cd web
 pnpm install
 cp .env.local.example .env.local   # 如需自定义 API 地址
+# 确认 .env.local 里的 NEXT_PUBLIC_API_URL 与 FastAPI 端口一致（默认 http://localhost:8000）
 pnpm dev --port 3000
 ```
 
@@ -157,6 +158,26 @@ pnpm lint
 ```
 
 如需自动修复，可结合 `pnpm lint --fix` 与 `ruff format`。
+
+### 🔁 API 测试脚本
+
+后端启动后，可使用 `server/test_api.py` 进行端到端接口验收（默认覆盖 `/auth/status`、`/auth/login`、`/providers`、`/auth/config`、`/healthz`、`/query`、`/stream`、`/upload`）。
+
+```bash
+cd server
+python test_api.py --password "$SYSTEM_PASSWORD" \
+  --base-url http://localhost:8000 \
+  --question "简单介绍一下项目？"
+```
+
+实用参数：
+
+- `--upload-file path/to/doc.pdf` 使用真实文件测试 `/upload`（默认用内存文本）。
+- `--guest-config guest.json` 触发 `/auth/guest`，JSON 内需提供 LLM/Embedding key。
+- `--test-gemini --gemini-file path/to/doc.txt` 额外测试 `/gemini/*` 路由（需配置 GEMINI_API_KEY）。
+- 所有选项也可通过环境变量传入：`API_BASE_URL`、`SYSTEM_PASSWORD`、`LLM_PROVIDER`。
+
+脚本执行结果会逐条打印接口状态，若有失败会在最后给出摘要，方便 CI / 本地冒烟验证。
 
 ## 🐳 Docker 部署
 

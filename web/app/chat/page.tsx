@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { authManager, getAuthHeader } from '../lib/auth';
 import { apiUrl } from '../../lib/api';
 import { useRouter } from 'next/navigation';
+import { BookIcon, ChatBubbleIcon, InfoIcon, LockIcon, ProvidersIcon, UserIcon } from '../../components/icons';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -163,29 +164,37 @@ export default function ChatPage() {
                 RAG知识库机器人
               </Link>
               <div className="flex space-x-6">
-                <Link 
-                  href="/chat" 
-                  className="text-blue-600 px-3 py-2 rounded-md text-sm font-medium border-b-2 border-blue-600"
+                <Link
+                  href="/chat"
+                  className="text-blue-600 px-3 py-2 rounded-md text-sm font-medium border-b-2 border-blue-600 inline-flex items-center gap-2"
                 >
-                  💬 智能问答
+                  <ChatBubbleIcon className="h-4 w-4 text-blue-500" />
+                  智能问答
                 </Link>
-                <Link 
-                  href="/docs" 
-                  className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors"
+                <Link
+                  href="/docs"
+                  className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors inline-flex items-center gap-2"
                 >
-                  📚 知识库管理
+                  <BookIcon className="h-4 w-4 text-gray-500" />
+                  知识库管理
                 </Link>
-                <Link 
-                  href="/providers" 
-                  className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors"
+                <Link
+                  href="/providers"
+                  className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors inline-flex items-center gap-2"
                 >
-                  ⚙️ AI提供商
+                  <ProvidersIcon className="h-4 w-4 text-gray-500" />
+                  AI提供商
                 </Link>
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-500">
-                {userType === 'system' ? '🔐 系统用户' : '👤 游客用户'}
+              <span className="text-sm text-gray-500 inline-flex items-center gap-2">
+                {userType === 'system' ? (
+                  <LockIcon className="h-4 w-4 text-gray-500" />
+                ) : (
+                  <UserIcon className="h-4 w-4 text-gray-500" />
+                )}
+                {userType === 'system' ? '系统用户' : '游客用户'}
               </span>
               {userConfig && (
                 <span className="text-xs text-gray-400">
@@ -209,10 +218,9 @@ export default function ChatPage() {
               <h3 className="text-lg font-medium text-gray-900 mb-2">开始对话</h3>
               <p className="text-gray-600">在下方输入您的问题，我将为您提供智能回答。</p>
               {userType === 'guest' && (
-                <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                  <p className="text-sm text-blue-800">
-                    💡 您正在使用游客模式，基于您的自定义API配置进行问答。
-                  </p>
+                <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200 text-sm text-blue-800 inline-flex items-center gap-2 justify-center">
+                  <InfoIcon className="h-4 w-4 text-blue-600" />
+                  您正在使用游客模式，基于您的自定义API配置进行问答。
                 </div>
               )}
             </div>
