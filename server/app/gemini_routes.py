@@ -4,7 +4,6 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import google.generativeai as genai
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
@@ -21,6 +20,8 @@ async def upload_file_to_gemini(
     """上传文件到Gemini并可选地进行问答"""
     if not gemini_handler.is_available():
         raise HTTPException(status_code=501, detail="Gemini API未配置")
+    if not gemini_handler.is_file_api_available():
+        raise HTTPException(status_code=501, detail="未安装google-generativeai，文件接口不可用")
     
     try:
         # 检查文件类型
@@ -200,27 +201,4 @@ async def cleanup_gemini_files():
     """清理Gemini上传的文件"""
     if not gemini_handler.is_available():
         return {"status": "error", "message": "Gemini API未配置"}
-    
-    try:
-        # 获取所有上传的文件
-        files = genai.list_files()
-        deleted_count = 0
-        
-        for file in files:
-            try:
-                file.delete()
-                deleted_count += 1
-            except:
-                pass
-        
-        return {
-            "status": "success",
-            "message": f"已清理 {deleted_count} 个文件",
-            "deleted_count": deleted_count
-        }
-        
-    except Exception as e:
-        return {
-            "status": "error",
-            "message": f"清理失败: {str(e)}"
-        }
+    return gemini_handler.cleanup_uploaded_files()

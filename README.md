@@ -89,6 +89,9 @@ echo "LLM_PROVIDER=gemini" >> server/.env
 echo "EMBEDDING_PROVIDER=gemini" >> server/.env
 
 # 获取Gemini API密钥: https://makersuite.google.com/app/apikey
+
+# 如需启用文件上传/清理接口，可额外安装（可选）
+pip install google-generativeai==0.8.5
 ```
 
 ### 环境要求
