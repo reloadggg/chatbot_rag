@@ -92,49 +92,68 @@ echo "EMBEDDING_PROVIDER=gemini" >> server/.env
 ```
 
 ### 环境要求
-- Python 3.8+
-- Node.js 16+
-- pnpm包管理器
+- Python 3.10（与 `server/app/settings.py` 的依赖版本一致）
+- Node.js 18+、pnpm
+- OpenAI / Gemini / Qdrant API Key（视需求配置）
 
-### 后端设置
+### 配置 `.env`
 
 ```bash
-# 进入后端目录
 cd server
-
-# 创建虚拟环境
-python -m venv .venv
-source .venv/bin/activate  # Linux/Mac
-# .venv\Scripts\activate   # Windows
-
-# 安装依赖
-pip install -r requirements.txt
-
-# 配置环境变量
 cp .env.example .env
-# 编辑.env文件，填入API密钥
-
-# 运行服务
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
-### 前端设置
+至少填写以下字段（示例）：
+
+| 变量 | 说明 |
+| --- | --- |
+| `SYSTEM_PASSWORD` | 后台登录密码（≥8位，供 `/auth/login` 使用） |
+| `JWT_SECRET_KEY` | JWT 签名密钥 |
+| `LLM_PROVIDER` / `LLM_MODEL` / `LLM_API_KEY` | 语言模型配置，可选 `openai` 或 `gemini` |
+| `EMBEDDING_PROVIDER` / `EMBEDDING_MODEL` / `EMBEDDING_API_KEY` | 嵌入模型配置 |
+| `GEMINI_API_KEY` / `GEMINI_MODEL` | 仅在使用 Gemini 时需要 |
+
+> 🚫 请勿把真实密钥提交到 Git 仓库，可通过 `.env.example` 扩展占位字段。
+
+### 后端启动
 
 ```bash
-# 进入前端目录
-cd web
-
-# 安装依赖
-pnpm install
-
-# 配置环境变量（可选）
-cp .env.local.example .env.local
-
-# 运行开发服务器
-pnpm dev --hostname 0.0.0.0 --port 3000
+cd server
+python -m venv .venv
+source .venv/bin/activate  # Windows 使用 .venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
 ```
 
-访问 http://localhost:3000 开始使用。
+服务启动后可通过 `http://localhost:8000/docs` 查看 FastAPI 文档，并在终端看到中文状态日志（🌏 / 📚 / 🧠 等）。
+
+### 前端启动
+
+```bash
+cd web
+pnpm install
+cp .env.local.example .env.local   # 如需自定义 API 地址
+pnpm dev --port 3000
+```
+
+访问 http://localhost:3000/chat 进入聊天界面，确保 `.env.local` 的后端地址与实际端口一致。
+
+### 测试与质量检查
+
+按照项目规范在提交前执行：
+
+```bash
+# 后端
+cd server
+ruff check app
+pytest -q
+
+# 前端
+cd web
+pnpm lint
+```
+
+如需自动修复，可结合 `pnpm lint --fix` 与 `ruff format`。
 
 ## 📋 核心功能
 

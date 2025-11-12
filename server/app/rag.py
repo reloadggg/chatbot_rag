@@ -65,7 +65,7 @@ class RAGPipeline:
             embeddings = OpenAIEmbeddings(
                 model=self.settings.embedding_model,
                 api_key=self.settings.embedding_api_key,
-                base_url=self.settings.__dict__.get('EMBEDDING_BASE_URL', None)
+                base_url=self.settings.embedding_base_url or None
             )
             self.provider = "openai"
             return embeddings
@@ -109,7 +109,7 @@ class RAGPipeline:
             llm = ChatOpenAI(
                 model=self.settings.llm_model,
                 api_key=self.settings.llm_api_key,
-                base_url=self.settings.__dict__.get('LLM_BASE_URL', None),
+                base_url=self.settings.llm_base_url or None,
                 temperature=self.settings.temperature,
                 max_tokens=self.settings.max_tokens
             )

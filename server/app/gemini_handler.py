@@ -9,9 +9,9 @@ import json
 
 class GeminiHandler:
     def __init__(self):
-        self.api_key = settings.__dict__.get('GEMINI_API_KEY', '')
-        self.model_name = settings.__dict__.get('GEMINI_MODEL', 'gemini-2.0-flash-exp')
-        self.base_url = settings.__dict__.get('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta')
+        self.api_key = settings.gemini_api_key
+        self.model_name = settings.gemini_model
+        self.base_url = settings.gemini_base_url
         
         if self.api_key:
             self._initialize_gemini()

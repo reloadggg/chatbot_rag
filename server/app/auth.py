@@ -10,13 +10,13 @@ import json
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # JWT配置
-SECRET_KEY = settings.__dict__.get('JWT_SECRET_KEY', secrets.token_urlsafe(32))
+SECRET_KEY = settings.jwt_secret_key or secrets.token_urlsafe(32)
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24小时
 
 class AuthManager:
     def __init__(self):
-        self.system_password = settings.__dict__.get('SYSTEM_PASSWORD', '')
+        self.system_password = settings.system_password
         self.guest_sessions: Dict[str, Dict[str, Any]] = {}
         
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
@@ -118,11 +118,11 @@ class AuthManager:
                 "llm_provider": settings.llm_provider,
                 "llm_model": settings.llm_model,
                 "llm_api_key": settings.llm_api_key,
-                "llm_base_url": settings.__dict__.get('LLM_BASE_URL', None),
+                "llm_base_url": settings.llm_base_url or None,
                 "embedding_provider": settings.embedding_provider,
                 "embedding_model": settings.embedding_model,
                 "embedding_api_key": settings.embedding_api_key,
-                "embedding_base_url": settings.__dict__.get('EMBEDDING_BASE_URL', None)
+                "embedding_base_url": settings.embedding_base_url or None
             }
         elif user_type == "guest":
             # 游客用户使用自己的配置

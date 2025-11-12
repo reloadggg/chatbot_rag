@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "RAG_知识库机器人"
@@ -20,13 +20,18 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_base_url: str = ""
 
+    system_password: str = ""
+    jwt_secret_key: str = ""
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.0-flash-exp"
+    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+
     top_k: int = 24
     max_tokens: int = 800
     temperature: float = 0.3
     allow_origins: str = "http://localhost:3000"
 
-    class Config:
-        env_file = ".env"
+    model_config = SettingsConfigDict(env_file=".env", extra="allow")
 
 settings = Settings()
 
