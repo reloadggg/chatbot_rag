@@ -292,9 +292,9 @@ LLM_API_KEY=your-api-key-here
 LLM_BASE_URL=https://api.openai.com/v1
 
 # 参数
-TOP_K=24
-MAX_TOKENS=800
-TEMPERATURE=0.3
+TOP_K=24              # 可留空，默认为 24
+MAX_TOKENS=800        # 可留空，默认为 800
+TEMPERATURE=0.3       # 可留空，默认为 0.3 (按模型默认温度)
 
 # 前端跨域
 ALLOW_ORIGINS=http://localhost:3000

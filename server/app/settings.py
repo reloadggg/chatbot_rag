@@ -1,3 +1,6 @@
+from typing import Optional
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -26,9 +29,9 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-2.0-flash-exp"
     gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
 
-    top_k: int = 24
-    max_tokens: int = 800
-    temperature: float = 0.3
+    top_k: Optional[int] = None
+    max_tokens: Optional[int] = None
+    temperature: Optional[float] = None
     allow_origins: str = "http://localhost:3000"
 
     model_config = SettingsConfigDict(env_file=".env", extra="allow")
@@ -36,6 +39,12 @@ class Settings(BaseSettings):
     def model_post_init(self, __context):
         self.llm_base_url = self._normalize_base_url(self.llm_base_url, "chat/completions")
         self.embedding_base_url = self._normalize_base_url(self.embedding_base_url, "embeddings")
+        if self.top_k is None:
+            self.top_k = 24
+        if self.max_tokens is None:
+            self.max_tokens = 800
+        if self.temperature is None:
+            self.temperature = 0.3
 
     @staticmethod
     def _normalize_base_url(base_url: str, endpoint_suffix: str) -> str:
@@ -46,6 +55,13 @@ class Settings(BaseSettings):
         if cleaned.endswith(suffix):
             cleaned = cleaned[: -len(suffix)]
         return cleaned
+
+    @field_validator("top_k", "max_tokens", "temperature", mode="before")
+    @classmethod
+    def _empty_str_to_none(cls, value):
+        if isinstance(value, str) and value.strip() == "":
+            return None
+        return value
 
 settings = Settings()
 
