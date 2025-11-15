@@ -1,245 +1,114 @@
 # 🔐 鉴权系统使用指南
 
-## 🎯 鉴权功能概述
+> TL;DR：系统首次启动会要求登录。你可以使用服务器预置的密码（系统模式），也可以带着自己的 API Key 以游客身份进入。
 
-RAG知识库机器人现已支持完整的**鉴权系统**，提供两种登录模式：
+---
 
-### ✅ 支持的认证模式
+## 🌟 功能一览
 
-1. **🔐 系统登录模式** - 使用预设的密码和API配置
-2. **👤 游客登录模式** - 自定义API密钥和提供商配置
+| 登录方式 | 适用场景 | 核心特点 |
+| --- | --- | --- |
+| **系统登录** | 团队共用、稳定部署 | 使用服务器 `.env` 中的密钥与模型，无需手动填写 API Key |
+| **游客登录** | 个人试用、临时接入 | 登录时自带 API Key、模型与 Base URL，不写入服务器 |
 
-## 🔧 鉴权配置
+---
 
-### 1. 系统密码配置
+## ⚙️ 准备工作
 
-在 `server/.env` 文件中设置系统密码和JWT密钥：
+1. **编辑服务器配置**（可选但推荐）  
+   在 `server/.env` 中加入：
+   ```env
+   SYSTEM_PASSWORD=your-secure-password   # 至少 8 位
+   JWT_SECRET_KEY=your-jwt-secret         # JWT 签名密钥
+   ```
+2. **重启后端服务**  
+   ```bash
+   ./start.sh
+   ```
+3. **访问登录页**  
+   浏览器打开 `http://localhost:3000/login`
 
-```env
-# 系统安全设置
-SYSTEM_PASSWORD=your-secure-password-here  # 最少8位字符
-JWT_SECRET_KEY=your-jwt-secret-key-here    # 用于token签名
-```
+> 💡 如果不设置 `SYSTEM_PASSWORD`，系统会自动进入游客模式引导，你需要在页面里手动填写 API Key。
 
-### 2. 认证模式选择
+---
 
-启动应用后，前端会自动调用 `/auth/status` 并根据系统配置选择默认认证模式：
-- 如果设置了 `SYSTEM_PASSWORD`（不少于8位），系统登录模式可用
-- 如果没有配置系统密码，则默认使用游客登录模式
+## 🔑 登录体验
 
-## 🚀 使用方式
+### 🅰️ 系统登录
 
-### 系统登录模式
+- 输入 8 位以上的系统密码即可进入
+- 前端默认提供商仅用于界面展示，真实配置仍来自服务器环境变量
+- 登录成功后，后端会下发 24 小时有效的访问令牌
 
-适合：
-- 管理员使用
-- 团队共享环境
-- 使用预设的API配置
+### 🅱️ 游客登录
 
-**登录界面：**
-- 输入系统密码
-- 选择默认提供商（仅用于初始化界面，实际仍以环境变量中的密钥/模型为准）
-- 登录后系统自动读取服务器环境变量中的API密钥和模型配置
+- 适用于带着自己的 OpenAI / Gemini / 其他模型配置访问
+- 页面中可以分别设置：
+  - LLM 提供商、模型、Base URL
+  - 嵌入模型及其密钥
+- 所有密钥只保存在当前浏览器会话里，不会上传到服务器磁盘
 
-### 游客登录模式
+---
 
-适合：
-- 个人用户使用
-- 自定义API配置
-- 临时访问
+## 🔍 登录之后会发生什么？
 
-**登录界面：**
-- 自定义选择AI提供商（OpenAI/Gemini）
-- 输入自己的API密钥
-- 设置自定义的BaseURL（可选）
-- 配置独立的LLM和嵌入模型
+- 前端会把 `access_token`、`user_type` 等信息写入 `localStorage`
+- 每次调用受保护接口时，都会自动在请求头中附带 `Authorization: Bearer <token>`
+- 未登录或令牌过期时，页面会自动跳转回 `/login`
+- 顶部导航会显示当前登录身份（系统用户 / 游客）
 
-## 📋 登录流程
+---
 
-### 1. 访问系统
-打开应用会自动跳转到登录页面：
-```
-http://localhost:3000/login
-```
+## 🧪 手动获取访问令牌
 
-### 2. 选择认证模式
-- **系统登录**：需要输入系统密码
-- **游客登录**：需要配置自己的API密钥
+在命令行想要直接调用后端？可以通过 API 获取 token：
 
-### 3. 系统登录配置
-如果选择系统登录：
-- 输入系统密码（最少8位）
-- 选择默认提供商（可选）
-- 系统将使用环境变量中的API配置
-
-### 4. 游客登录配置
-如果选择游客登录：
-- 选择LLM提供商（OpenAI/Gemini）
-- 输入相应的API密钥
-- 选择模型类型
-- 设置BaseURL（可选）
-- 配置嵌入模型提供商
-
-### 5. 开始使用
-登录成功后会自动跳转到主界面，所有后续操作都会携带认证信息。
-
-## 🔍 认证状态管理
-
-### 前端认证检查
-系统会自动验证用户的登录状态：
-- 未登录用户会被重定向到登录页
-- 登录状态会保存在localStorage中（`access_token`、`user_type`、`user_config` 等字段）
-- 所有对受保护后端API的请求都需要在 `Authorization` 请求头中携带 `Bearer <token>`
-
-### 用户信息显示
-导航栏会显示当前用户的类型：
-- 🔐 系统用户 - 使用环境变量配置
-- 👤 游客用户 - 使用自定义API配置
-
-## 🛡️ 安全特性
-
-### 1. JWT Token认证
-- 使用JWT进行用户认证
-- Token有效期为24小时
-- 需在请求头中使用 `Authorization: Bearer <token>`
-
-### 2. 密码安全
-- 系统密码最少8位字符
-- 当前实现直接比较明文密码，建议在部署环境中自行使用安全的密钥管理策略
-- 建议同时配置 `JWT_SECRET_KEY`，用于签名令牌
-
-### 3. 数据隔离
-- 游客用户的API密钥不会保存在服务器
-- 所有配置仅在当前会话中有效
-- 系统用户和游客用户完全隔离
-
-### 4. API访问控制
-- 所有API端点都需要认证
-- 基于token的权限验证
-- 用户只能访问自己的配置数据
-
-## 🎯 使用场景
-
-### 系统登录模式适合：
-- 🏢 **企业环境** - 统一API配置，团队共享
-- 🔧 **开发测试** - 使用预设的稳定配置
-- 👥 **多用户共享** - 管理员统一管理API密钥
-- ⚙️ **生产环境** - 使用环境变量的安全配置
-
-### 游客登录模式适合：
-- 👤 **个人用户** - 使用自己的API密钥
-- 🧪 **测试体验** - 快速尝试不同配置
-- 💰 **成本控制** - 使用自己的账户配额
-- 🔑 **密钥安全** - 不共享API密钥给他人
-
-## 🚀 快速开始
-
-### 1. 配置系统密码（可选）
 ```bash
-cd /path/to/RAG-ChatBot/server
-echo "SYSTEM_PASSWORD=mysecurepassword123" >> .env
-echo "JWT_SECRET_KEY=myjwtsecretkey456" >> .env
-```
-
-### 2. 启动系统
-```bash
-./start.sh
-```
-
-### 3. 访问登录页面
-```
-http://localhost:3000/login
-```
-
-### 4. 选择认证模式
-- 输入系统密码（如果配置了）
-- 或者选择游客模式并配置API密钥
-
-### 5. 开始使用
-登录成功后即可使用所有功能！
-
-## 🔑 API调用示例
-
-### 1. 获取系统令牌
-```bash
-curl -X POST http://localhost:8001/auth/login \
+# 系统密码登录
+token=$(curl -s -X POST http://localhost:8001/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"password":"your-secure-password","provider":"env"}'
+  -d '{"password":"your-secure-password","provider":"env"}')
 ```
 
-将响应中的 `access_token` 保存到变量：
-
 ```bash
-TOKEN="<返回的access_token>"
-curl http://localhost:8001/healthz \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-### 2. 游客模式获取令牌
-```bash
-curl -X POST http://localhost:8001/auth/guest \
+# 游客登录（示例以 Gemini 为例）
+token=$(curl -s -X POST http://localhost:8001/auth/guest \
   -H "Content-Type: application/json" \
   -d '{
     "llm_provider": "gemini",
     "llm_model": "gemini-2.0-flash-exp",
     "llm_api_key": "your-gemini-key",
-    "llm_base_url": "https://generativelanguage.googleapis.com/v1beta",
     "embedding_provider": "gemini",
-    "embedding_model": "models/embedding-001",
-    "embedding_api_key": "your-gemini-key",
-    "embedding_base_url": "https://generativelanguage.googleapis.com/v1beta"
-  }'
+    "embedding_model": "models/embedding-001"
+  }')
 ```
 
-随后同样在请求头中携带 `Authorization: Bearer <token>` 即可访问受保护接口。
+取出 `access_token` 后即可访问任何受保护接口：
 
-## 🔧 高级配置
-
-### 自定义JWT密钥
-```env
-JWT_SECRET_KEY=your-very-secure-jwt-secret-key-here
+```bash
+TOKEN=$(echo "$token" | jq -r '.access_token')
+curl http://localhost:8001/healthz -H "Authorization: Bearer $TOKEN"
 ```
 
-### 设置Token有效期
-（可以通过修改后端代码调整）
-
-### 多提供商支持
-游客模式支持同时配置多个提供商，系统会自动选择合适的配置。
-
-## 📊 用户类型对比
-
-| 功能 | 系统用户 | 游客用户 |
-|------|----------|----------|
-| API密钥来源 | 环境变量 | 用户输入 |
-| 配置持久性 | 服务器环境 | 会话期间 |
-| 提供商选择 | 预设选项 | 完全自定义 |
-| 访问权限 | 全部功能 | 全部功能 |
-| 数据隔离 | 系统级 | 会话级 |
-
-## 🔍 故障排除
-
-### 常见问题
-
-1. **登录失败**
-   - 检查系统密码是否正确
-   - 验证API密钥格式
-   - 确保网络连接正常
-
-2. **Token过期**
-   - Token有效期为24小时
-   - 需要重新登录
-
-3. **权限错误**
-   - 确保已登录
-   - 检查token是否有效
-
-4. **配置错误**
-   - 验证API密钥格式
-   - 检查BaseURL格式
-   - 确认提供商选择正确
+> 🔐 建议安装 `jq` 以便解析 JSON；如果环境没有，也可以改用 `python -c '…'`。
 
 ---
 
-**🔐 现在您的RAG知识库机器人具备了完整的鉴权系统！**
+## 🛡️ 安全小贴士
 
-用户可以选择系统模式（统一管理）或游客模式（个性化配置），确保了系统的安全性和灵活性。🎉
+- 系统密码建议存放在安全的密钥管理服务中，并限制访问权限
+- 定期轮换 `SYSTEM_PASSWORD` 和 `JWT_SECRET_KEY`
+- 游客模式密钥不会落盘，但浏览器缓存仍可能被他人读取，离开时记得退出登录
+- 若部署在公网，务必同时启用 HTTPS 与反向代理的 WAF/速率限制
+
+---
+
+## ✅ 快速检查清单
+
+- [ ] `.env` 中已配置系统密码与 JWT 密钥
+- [ ] 前端能在登录状态下访问受保护接口（例如 `/healthz`）
+- [ ] 令牌过期时能正确跳转回登录页
+- [ ] 游客模式下的个人密钥不会在服务器留下痕迹
+
+搞定！现在你已经完成 RAG ChatBot 鉴权系统的配置与使用。 🎉
+
