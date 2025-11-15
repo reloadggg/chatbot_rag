@@ -12,6 +12,7 @@ import json
 import asyncio
 from typing import Any, Dict, List, Optional
 from pathlib import Path
+from dataclasses import asdict
 
 app = FastAPI(title=settings.app_name)
 
@@ -94,17 +95,6 @@ def get_current_user_optional(authorization: Optional[str] = Header(None)) -> Op
     except Exception:
         return None
 
-def get_current_user_optional(authorization: Optional[str] = Header(None)) -> Optional[Dict[str, Any]]:
-    if not authorization:
-        return None
-    try:
-        scheme, token = authorization.split()
-        if scheme.lower() != "bearer":
-            return None
-        return auth_manager.verify_token(token)
-    except Exception:
-        return None
-
 # ===== 认证相关API =====
 
 @app.post("/auth/login", response_model=AuthResponse)
@@ -158,7 +148,7 @@ async def guest_login(request: GuestLoginRequest):
     """游客登录"""
     try:
         # 验证游客配置
-        config_data = request.dict()
+        config_data = request.model_dump()
         errors = user_config_manager.validate_provider_config(config_data)
         
         if errors:
@@ -169,10 +159,14 @@ async def guest_login(request: GuestLoginRequest):
         session_id = str(uuid.uuid4())
         
         # 创建游客配置
-        guest_config = user_config_manager.create_user_config(config_data)
-        
+        guest_config = user_config_manager.create_user_config({
+            **config_data,
+            "session_id": session_id,
+            "user_type": "guest"
+        })
+
         # 创建游客令牌
-        access_token = auth_manager.create_guest_token(session_id, guest_config.__dict__)
+        access_token = auth_manager.create_guest_token(session_id, asdict(guest_config))
         
         # 获取提供商信息
         providers_info = {
@@ -335,12 +329,12 @@ async def query_once(
         # 使用用户的配置创建RAG实例
         # 这里需要动态创建RAG实例，而不是使用全局实例
         # 为了简化，我们暂时使用全局配置，后续可以优化
-        answer = rag_pipeline.query(request.question)
+        answer, provider = rag_pipeline.query(request.question, user_config)
         return {
             "question": request.question,
             "answer": answer,
             "status": "success",
-            "provider": rag_pipeline.provider or settings.llm_provider,
+            "provider": provider,
             "user_type": current_user.get("user_type")
         }
     except Exception as e:
@@ -360,7 +354,7 @@ async def stream_query(
     """流式查询（需要认证）"""
     async def generate():
         try:
-            for chunk in rag_pipeline.stream_query(question):
+            for chunk in rag_pipeline.stream_query(question, user_config):
                 yield f"data: {json.dumps({'chunk': chunk}, ensure_ascii=False)}\n\n"
                 await asyncio.sleep(0.01)  # 小延迟确保流式效果
             yield f"data: {json.dumps({'status': 'done'}, ensure_ascii=False)}\n\n"
@@ -426,7 +420,9 @@ async def upload_file(
                 print(f"✅ 文件已添加到知识库: {file.filename}")
             else:
                 print(f"⚠️  文件添加到知识库失败: {file.filename}")
-        
+
+        provider = user_config.get("llm_provider") or settings.llm_provider
+
         return {
             "message": "文件上传成功",
             "file_id": result["file_id"],
@@ -435,7 +431,7 @@ async def upload_file(
             "chunks_count": result["chunks_count"],
             "processed": process,
             "status": "success",
-            "provider": rag_pipeline.provider or settings.llm_provider,
+            "provider": provider,
             "user_type": current_user.get("user_type")
         }
         
@@ -446,6 +442,55 @@ async def upload_file(
         raise HTTPException(status_code=500, detail=f"文件上传失败: {str(e)}")
 
 # 添加Gemini路由（也需要认证）
+@app.get("/documents", response_model=List[DocumentInfo], dependencies=[Depends(get_current_user)])
+async def list_documents(
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """列出上传的文档（需要认证）"""
+    files = document_processor.list_files()
+    documents = []
+    for item in files:
+        documents.append(DocumentInfo(
+            file_id=item.get("file_id", ""),
+            filename=item.get("filename", ""),
+            file_size=item.get("file_size", 0),
+            created_at=item.get("created_at", 0.0),
+            text_length=item.get("text_length"),
+            chunks_count=item.get("chunks_count"),
+            status=item.get("status", "stored")
+        ))
+    return documents
+
+
+@app.get("/documents/stats", dependencies=[Depends(get_current_user)])
+async def document_stats(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """获取文档统计信息（需要认证）"""
+    files = document_processor.list_files()
+    total_size = sum(file.get("file_size", 0) for file in files)
+    vector_stats = rag_pipeline.get_document_stats()
+
+    return {
+        "total_files": len(files),
+        "total_size": total_size,
+        "vector_db_stats": vector_stats,
+        "files": files,
+    }
+
+
+@app.delete("/documents/{file_id}", dependencies=[Depends(get_current_user)])
+async def delete_document(
+    file_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """删除指定文档（需要认证）"""
+    deleted = document_processor.delete_file(file_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="未找到指定文件")
+
+    rag_pipeline.delete_documents(file_id)
+    return {"status": "success", "file_id": file_id}
+
+
 app.include_router(gemini_router, dependencies=[Depends(get_current_user)])
 
 # 添加Path导入

@@ -1,6 +1,8 @@
+from typing import Any, Dict, Optional, Tuple
+
 from app.settings import settings
-from app.document_processor import document_processor
 from app.gemini_handler import gemini_handler
+from app.user_config import user_config_manager
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_google_genai import GoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_chroma import Chroma
@@ -21,6 +23,14 @@ class RAGPipeline:
         self.llm = None
         self.chain = None
         self.provider = None
+        self._prompt_template = """基于以下上下文回答用户的问题：
+
+        上下文：
+        {context}
+
+        问题：{question}
+
+        请提供准确、简洁的中文回答。"""
         self._initialize_components()
     
     def _initialize_components(self):
@@ -119,25 +129,19 @@ class RAGPipeline:
             print(f"❌ 语言模型创建失败: {str(e)}")
             raise
     
-    def _create_rag_chain(self):
-        """创建RAG链"""
-        template = """基于以下上下文回答用户的问题：
-        
-        上下文：
-        {context}
-        
-        问题：{question}
-        
-        请提供准确、简洁的中文回答。"""
-        
-        prompt = ChatPromptTemplate.from_template(template)
-        
-        self.chain = (
+    def _build_chain(self, llm: BaseLanguageModel):
+        """根据指定LLM创建新的RAG链"""
+        prompt = ChatPromptTemplate.from_template(self._prompt_template)
+        return (
             {"context": self.vectorstore.as_retriever(search_kwargs={"k": self.settings.top_k}), "question": RunnablePassthrough()}
             | prompt
-            | self.llm
+            | llm
             | StrOutputParser()
         )
+
+    def _create_rag_chain(self):
+        """创建默认RAG链"""
+        self.chain = self._build_chain(self.llm)
     
     def add_documents(self, documents):
         """添加文档到向量数据库"""
@@ -154,33 +158,46 @@ class RAGPipeline:
             print(f"❌ 文档添加失败: {str(e)}")
             return False
     
-    def query(self, question: str) -> str:
+    def _resolve_chain(self, config: Optional[Dict[str, Any]]) -> Tuple[Any, str]:
+        """根据用户配置选择合适的RAG链和提供商信息"""
+        provider = self.provider or self.settings.llm_provider
+
+        if not config:
+            return self.chain, provider
+
+        try:
+            config_obj = user_config_manager.create_user_config(config)
+            llm = user_config_manager.create_llm(config_obj)
+            provider = config_obj.llm_provider or provider
+            chain = self._build_chain(llm)
+            return chain, provider
+        except Exception as e:
+            print(f"⚠️  无法根据用户配置创建专属RAG链，回退到默认链: {str(e)}")
+            return self.chain, provider
+
+    def query(self, question: str, config: Optional[Dict[str, Any]] = None) -> Tuple[str, str]:
         """单次查询"""
         try:
             print(f"📚 正在检索相似段落...")
-            
-            if self.provider == "gemini":
-                # Gemini的特殊处理可以在这里添加
-                pass
-            
-            answer = self.chain.invoke(question)
+            chain, provider = self._resolve_chain(config)
+
+            answer = chain.invoke(question)
             print(f"✅ 已生成回答")
-            return answer
+            return answer, provider
         except Exception as e:
             print(f"❌ 查询失败: {str(e)}")
-            return f"抱歉，处理问题时出现错误: {str(e)}"
-    
-    def stream_query(self, question: str):
+            provider = (config or {}).get("llm_provider") or self.provider or self.settings.llm_provider
+            return f"抱歉，处理问题时出现错误: {str(e)}", provider
+
+    def stream_query(self, question: str, config: Optional[Dict[str, Any]] = None):
         """流式查询"""
         try:
             print(f"📚 正在检索相似段落...")
             print(f"🧠 正在调用语言模型生成回答...")
-            
-            if self.provider == "gemini":
-                # Gemini的特殊处理可以在这里添加
-                pass
-            
-            for chunk in self.chain.stream(question):
+
+            chain, _ = self._resolve_chain(config)
+
+            for chunk in chain.stream(question):
                 yield chunk
             print(f"✅ 流式回答生成完成")
         except Exception as e:
@@ -217,6 +234,19 @@ class RAGPipeline:
     def is_gemini_available(self) -> bool:
         """检查Gemini是否可用"""
         return gemini_handler.is_available()
+
+    def delete_documents(self, file_id: str) -> bool:
+        """从向量存储中删除指定文件的所有片段"""
+        if not self.vectorstore or not hasattr(self.vectorstore, "delete"):
+            return False
+
+        try:
+            self.vectorstore.delete(where={"file_id": file_id})
+            print(f"🧹 已从向量库删除 file_id={file_id} 的文档片段")
+            return True
+        except Exception as e:
+            print(f"⚠️  删除向量库中文档失败: {str(e)}")
+            return False
 
 # 全局RAG管道实例
 rag_pipeline = RAGPipeline()
