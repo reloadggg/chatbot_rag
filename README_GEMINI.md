@@ -25,7 +25,7 @@ RAG知识库机器人现已支持 **Google Gemini** 作为AI提供商，提供�
 
 ### 2. 配置环境变量
 
-在 `.env` 文件中添加 Gemini 配置：
+在 `server/.env` 文件中添加 Gemini 配置：
 
 ```env
 # Gemini 配置（可选）
@@ -36,7 +36,13 @@ GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
 # 选择使用 Gemini 作为提供商
 LLM_PROVIDER=gemini
 EMBEDDING_PROVIDER=gemini
+
+# 启用系统登录时建议同时设置
+SYSTEM_PASSWORD=your-secure-password
+JWT_SECRET_KEY=your-jwt-secret
 ```
+
+> 💡 **提示**：系统登录模式需要同时配置 `SYSTEM_PASSWORD`（不少于8位）和 `JWT_SECRET_KEY`，否则仅能使用游客模式通过前端提供密钥。
 
 ### 3. 支持的 Gemini 模型
 
@@ -46,6 +52,43 @@ EMBEDDING_PROVIDER=gemini
 | `gemini-1.5-flash` | 语言模型 | 平衡性能和速度 |
 | `gemini-1.5-pro` | 语言模型 | 最强性能，适合复杂任务 |
 | `models/embedding-001` | 嵌入模型 | 文本向量化 |
+
+## 🔐 获取访问令牌
+
+所有受保护的后端接口（包括 `/query` 与 `/gemini/*`）都需要在请求头中携带 `Authorization: Bearer <token>`。可以通过以下方式获取令牌：
+
+> 如果系统未安装 `jq`，可改用其他方式解析返回的 JSON，例如使用 `python -c` 或手动复制 `access_token`。
+
+### 1. 系统登录（使用服务器环境变量）
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8001/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"password":"your-secure-password","provider":"env"}' | jq -r '.access_token')
+```
+
+### 2. 游客模式（自带API密钥）
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8001/auth/guest \
+  -H "Content-Type: application/json" \
+  -d '{
+    "llm_provider": "gemini",
+    "llm_model": "gemini-2.0-flash-exp",
+    "llm_api_key": "your-gemini-key",
+    "llm_base_url": "https://generativelanguage.googleapis.com/v1beta",
+    "embedding_provider": "gemini",
+    "embedding_model": "models/embedding-001",
+    "embedding_api_key": "your-gemini-key",
+    "embedding_base_url": "https://generativelanguage.googleapis.com/v1beta"
+  }' | jq -r '.access_token')
+```
+
+使用 `TOKEN` 变量即可访问所有受保护接口：
+
+```bash
+curl http://localhost:8001/healthz -H "Authorization: Bearer $TOKEN"
+```
 
 ## 🚀 使用 Gemini 功能
 
@@ -57,10 +100,12 @@ LLM_PROVIDER=gemini
 LLM_MODEL=gemini-2.0-flash-exp
 
 # 正常进行问答
-POST http://localhost:8001/query
-{
-  "question": "什么是多模态AI？"
-}
+curl -X POST http://localhost:8001/query \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "什么是多模态AI？"
+  }'
 ```
 
 ### 2. 文件搜索功能
@@ -70,6 +115,7 @@ POST http://localhost:8001/query
 ```bash
 # 上传PDF文件并提问
 curl -X POST http://localhost:8001/gemini/upload-file \
+  -H "Authorization: Bearer $TOKEN" \
   -F "file=@document.pdf" \
   -F "question=这份文档的主要内容是什么？" \
   -F "process=true"
@@ -80,6 +126,7 @@ curl -X POST http://localhost:8001/gemini/upload-file \
 ```bash
 # 上传多个文件并提问
 curl -X POST http://localhost:8001/gemini/process-with-files \
+  -H "Authorization: Bearer $TOKEN" \
   -F "question=这些文件有什么共同点？" \
   -F "files=@file1.pdf" \
   -F "files=@file2.jpg" \
@@ -135,12 +182,15 @@ DELETE /gemini/cleanup
 - 清理Gemini云端文件
 ```
 
+> 📌 **注意**：以上端点均需在请求头中附带 `Authorization: Bearer <token>` 才能访问。
+
 ## 🎯 使用场景
 
 ### 1. 文档智能分析
 ```bash
 # 上传技术文档并提取关键信息
 curl -X POST http://localhost:8001/gemini/upload-file \
+  -H "Authorization: Bearer $TOKEN" \
   -F "file=@tech_doc.pdf" \
   -F "question=请总结这份技术文档的主要技术点和创新之处" \
   -F "process=true"
@@ -150,6 +200,7 @@ curl -X POST http://localhost:8001/gemini/upload-file \
 ```bash
 # 上传图片并询问内容
 curl -X POST http://localhost:8001/gemini/upload-file \
+  -H "Authorization: Bearer $TOKEN" \
   -F "file=@chart.png" \
   -F "question=这张图表显示了什么数据趋势？" \
   -F "process=true"
@@ -159,6 +210,7 @@ curl -X POST http://localhost:8001/gemini/upload-file \
 ```bash
 # 上传多个文档进行对比
 curl -X POST http://localhost:8001/gemini/process-with-files \
+  -H "Authorization: Bearer $TOKEN" \
   -F "question=这些文档有什么异同点？" \
   -F "files=@doc1.pdf" \
   -F "files=@doc2.pdf" \
@@ -213,6 +265,7 @@ EMBEDDING_PROVIDER=openai
 ### 1. 配置Gemini
 ```bash
 # 编辑配置文件
+cd /path/to/RAG-ChatBot
 nano server/.env
 
 # 添加Gemini配置
@@ -223,6 +276,7 @@ EMBEDDING_PROVIDER=gemini
 
 ### 2. 重启服务
 ```bash
+cd /path/to/RAG-ChatBot
 ./start.sh
 ```
 

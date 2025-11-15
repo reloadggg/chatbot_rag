@@ -20,16 +20,34 @@
 访问 [Google AI Studio](https://makersuite.google.com/app/apikey)
 
 ### 2. 配置环境变量
+在 `server/.env` 中追加：
 ```env
 # Gemini 配置
 GEMINI_API_KEY=your-gemini-api-key-here
 LLM_PROVIDER=gemini
 EMBEDDING_PROVIDER=gemini
+
+# 若需启用系统登录，请同时设置
+SYSTEM_PASSWORD=your-secure-password
+JWT_SECRET_KEY=your-jwt-secret
 ```
 
-### 3. 访问 Gemini 功能
+> 提示：`SYSTEM_PASSWORD` 需不少于8位。未配置系统密码时，可使用游客模式在前端填写密钥。
+
+### 3. 获取访问令牌
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8001/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"password":"your-secure-password","provider":"env"}' | jq -r '.access_token')
+```
+
+若使用游客模式，可将上述请求替换为 `/auth/guest` 并传入自己的Gemini密钥。所有 `/query` 与 `/gemini/*` 接口都需要在请求头中携带 `Authorization: Bearer $TOKEN`。
+
+> 未安装 `jq` 时，可以手动复制响应中的 `access_token` 或使用其他JSON解析工具。
+
+### 4. 访问 Gemini 功能
 - **提供商管理**: http://localhost:3000/providers
-- **文件搜索**: http://localhost:8001/gemini/upload-file
+- **文件搜索**: 使用 `curl` 时添加 `-H "Authorization: Bearer $TOKEN"`
 
 ## 📋 支持的文件格式
 - PDF文档（最大100MB）
@@ -52,6 +70,8 @@ GET /gemini/info
 GET /gemini/models
 ```
 
+> 以上接口均需在请求头中携带 `Authorization: Bearer $TOKEN`。
+
 ## 🎯 使用场景
 1. **文档智能分析** - 上传技术文档，提取关键信息
 2. **图片内容理解** - 上传图表，分析数据趋势
@@ -62,6 +82,7 @@ GET /gemini/models
 
 ```bash
 # 1. 配置 Gemini
+cd /path/to/RAG-ChatBot
 echo "GEMINI_API_KEY=your-key" >> server/.env
 echo "LLM_PROVIDER=gemini" >> server/.env
 

@@ -17,48 +17,70 @@
 ## 🔗 访问地址
 
 ### 后端API服务
-- **健康检查**: http://localhost:8001/healthz
+- **健康检查**: http://localhost:8001/healthz （需要 `Authorization: Bearer <token>`）
 - **API文档**: http://localhost:8001/docs
 - **查询API**: http://localhost:8001/query
 - **流式API**: http://localhost:8001/stream
 
 ### 前端Web界面
 - **主页面**: http://localhost:3000
+- **登录页面**: http://localhost:3000/login
 - **聊天界面**: http://localhost:3000/chat
 
 ## 🚀 快速验证
 
-### 1. 验证后端服务
-在Windows浏览器或PowerShell中访问：
-```
-http://localhost:8001/healthz
+### 1. 获取访问令牌
+所有受保护的API都需要携带 `Authorization: Bearer <token>`。可以先在WSL中执行：
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8001/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"password":"your-secure-password","provider":"env"}' | jq -r '.access_token')
+echo "$TOKEN"
 ```
 
-应该返回：
+将输出的令牌复制到Windows环境。若未配置系统密码，可通过前端游客模式登录并在浏览器开发者工具的 Local Storage 中查看 `access_token`。
+
+> 如果环境未安装 `jq`，可以手动复制响应中的 `access_token` 字段值。
+
+### 2. 验证后端服务
+在Windows的PowerShell中执行（将 `<TOKEN>` 替换为上一步复制的令牌）：
+```powershell
+$token = "<TOKEN>"
+curl http://localhost:8001/healthz -Headers @{ Authorization = "Bearer $token" }
+```
+
+预期返回：
 ```json
 {
   "status": "ok",
   "env": "dev",
   "embedding_model": "text-embedding-3-small",
   "llm_model": "gpt-4o-mini",
-  "message": "系统运行正常"
+  "message": "系统运行正常",
+  "user_type": "system",
+  "providers": {
+    "llm": "openai",
+    "embedding": "openai",
+    "gemini_available": true
+  }
 }
 ```
 
-### 2. 验证前端界面
+### 3. 验证前端界面
 在Windows浏览器中访问：
 ```
 http://localhost:3000/chat
 ```
 
-应该看到RAG知识库机器人的聊天界面。
+首次访问会跳转到登录页面，登录成功后即可看到聊天界面。
 
 ## 🔧 服务状态检查
 
 ### 检查后端服务
 ```bash
 # 在WSL中执行
-curl http://localhost:8001/healthz
+curl http://localhost:8001/healthz -H "Authorization: Bearer <TOKEN>"
 ```
 
 ### 检查前端服务
@@ -91,7 +113,7 @@ echo "WSL IP: $WSL_IP"
 
 ### 方式1: 一键启动（推荐）
 ```bash
-cd /mnt/d/codex/rag-chatbot
+cd /path/to/RAG-ChatBot
 ./start.sh
 ```
 
