@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Query, UploadFile, File, HTTPException, Form, Depends, Header, Request
+from fastapi import FastAPI, Query, UploadFile, File, HTTPException, Form, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
@@ -7,12 +7,14 @@ from app.rag import rag_pipeline
 from app.document_processor import document_processor
 from app.gemini_routes import router as gemini_router
 from app.auth import auth_manager
-from app.user_config import user_config_manager, UserConfig
-import json
+from app.model_registry import model_registry
+from app.conversation_store import conversation_store
 import asyncio
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 from dataclasses import asdict
+import json
+import uuid
 
 app = FastAPI(title=settings.app_name)
 
@@ -42,14 +44,11 @@ class LoginRequest(BaseModel):
     provider: str = "env"  # env, openai, gemini
 
 class GuestLoginRequest(BaseModel):
-    llm_provider: str
-    llm_model: str
-    llm_api_key: str
-    llm_base_url: Optional[str] = None
-    embedding_provider: str
-    embedding_model: str
-    embedding_api_key: str
-    embedding_base_url: Optional[str] = None
+    session_id: Optional[str] = None
+    llm_provider: Optional[str] = None
+    llm_model: Optional[str] = None
+    embedding_provider: Optional[str] = None
+    embedding_model: Optional[str] = None
 
 class AuthResponse(BaseModel):
     access_token: str
@@ -57,6 +56,39 @@ class AuthResponse(BaseModel):
     user_type: str
     config: Dict[str, Any]
     providers: Dict[str, Any]
+    session_id: Optional[str] = None
+    expires_at: Optional[str] = None
+
+
+class ConversationSummary(BaseModel):
+    session_id: str
+    title: str
+    user_type: str
+    created_at: float
+    updated_at: float
+
+
+class ConversationMessageModel(BaseModel):
+    role: str
+    content: str
+    created_at: float
+
+
+class RenameConversationRequest(BaseModel):
+    title: str
+
+
+
+# ===== Helper functions =====
+
+
+def sanitize_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        key: value
+        for key, value in config.items()
+        if not key.endswith("api_key")
+    }
+
 
 # 依赖函数
 def get_current_user(authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
@@ -84,6 +116,15 @@ def get_user_config(current_user: Dict[str, Any] = Depends(get_current_user)) ->
     return auth_manager.get_user_api_config(current_user)
 
 def get_current_user_optional(authorization: Optional[str] = Header(None)) -> Optional[Dict[str, Any]]:
+
+
+def ensure_session_access(session_id: str, current_user: Dict[str, Any]):
+    user_type = current_user.get("user_type")
+    if user_type == "guest":
+        token_session = current_user.get("session_id")
+        if not token_session or token_session != session_id:
+            raise HTTPException(status_code=403, detail="无权访问该会话")
+
     """尽量获取当前用户，失败返回None"""
     if not authorization:
         return None
@@ -112,27 +153,16 @@ async def login(request: LoginRequest):
                 "provider": request.provider
             })
             
+            providers_payload = model_registry.build_provider_payload(system_config)
+
             return AuthResponse(
                 access_token=access_token,
                 token_type="bearer",
                 user_type="system",
-                config=system_config,
-                providers={
-                    "llm_providers": [
-                        {
-                            "name": "openai",
-                            "models": ["gpt-4o-mini", "gpt-4o"],
-                            "available": bool(system_config.get("llm_api_key"))
-                        }
-                    ],
-                    "embedding_providers": [
-                        {
-                            "name": "openai",
-                            "models": ["text-embedding-3-small"],
-                            "available": bool(system_config.get("embedding_api_key"))
-                        }
-                    ]
-                }
+                config=sanitize_config(system_config),
+                providers=providers_payload,
+                session_id=None,
+                expires_at=None
             )
         else:
             raise HTTPException(status_code=401, detail="密码错误")
@@ -147,61 +177,56 @@ async def login(request: LoginRequest):
 async def guest_login(request: GuestLoginRequest):
     """游客登录"""
     try:
-        # 验证游客配置
-        config_data = request.model_dump()
-        errors = user_config_manager.validate_provider_config(config_data)
-        
-        if errors:
-            raise HTTPException(status_code=400, detail=f"配置验证失败: {errors}")
-        
-        # 创建游客会话
-        import uuid
-        session_id = str(uuid.uuid4())
-        
-        # 创建游客配置
-        guest_config = user_config_manager.create_user_config({
-            **config_data,
-            "session_id": session_id,
-            "user_type": "guest"
-        })
+        session_id = request.session_id
+        existing_session = None
 
-        # 创建游客令牌
-        access_token = auth_manager.create_guest_token(session_id, asdict(guest_config))
-        
-        # 获取提供商信息
-        providers_info = {
-            "llm_providers": [
-                {
-                    "name": "openai",
-                    "models": ["gpt-4o-mini", "gpt-4o"],
-                    "available": guest_config.llm_provider == "openai" and bool(guest_config.llm_api_key)
-                },
-                {
-                    "name": "gemini",
-                    "models": ["gemini-2.0-flash-exp", "gemini-1.5-flash"],
-                    "available": guest_config.llm_provider == "gemini" and bool(guest_config.llm_api_key)
-                }
-            ],
-            "embedding_providers": [
-                {
-                    "name": "openai",
-                    "models": ["text-embedding-3-small"],
-                    "available": guest_config.embedding_provider == "openai" and bool(guest_config.embedding_api_key)
-                },
-                {
-                    "name": "gemini",
-                    "models": ["models/embedding-001"],
-                    "available": guest_config.embedding_provider == "gemini" and bool(guest_config.embedding_api_key)
-                }
-            ]
-        }
-        
+        if session_id:
+            existing_session = auth_manager.get_guest_session(session_id)
+            if not existing_session:
+                raise HTTPException(status_code=404, detail="找不到对应的临时会话或已过期")
+
+        if not session_id:
+            session_id = str(uuid.uuid4())
+
+        if existing_session:
+            guest_config = existing_session.api_config
+            session_result = auth_manager.create_guest_session(session_id, guest_config)
+        else:
+            llm_provider = (request.llm_provider or settings.llm_provider or "openai").lower()
+            embedding_provider = (request.embedding_provider or settings.embedding_provider or "openai").lower()
+
+            if llm_provider not in {"openai", "gemini"}:
+                raise HTTPException(status_code=400, detail="暂不支持该语言模型提供商")
+            if embedding_provider not in {"openai", "gemini"}:
+                raise HTTPException(status_code=400, detail="暂不支持该嵌入提供商")
+
+            guest_config = {
+                "llm_provider": llm_provider,
+                "llm_model": request.llm_model
+                or (settings.gemini_model if llm_provider == "gemini" else settings.llm_model),
+                "llm_api_key": settings.gemini_api_key if llm_provider == "gemini" else settings.llm_api_key,
+                "llm_base_url": settings.gemini_base_url if llm_provider == "gemini" else settings.llm_base_url,
+                "embedding_provider": embedding_provider,
+                "embedding_model": request.embedding_model
+                or ("models/embedding-001" if embedding_provider == "gemini" else settings.embedding_model),
+                "embedding_api_key": settings.gemini_api_key if embedding_provider == "gemini" else settings.embedding_api_key,
+                "embedding_base_url": settings.gemini_base_url if embedding_provider == "gemini" else settings.embedding_base_url,
+                "session_id": session_id,
+                "user_type": "guest",
+            }
+
+            session_result = auth_manager.create_guest_session(session_id, guest_config)
+
+        providers_info = model_registry.build_provider_payload(guest_config)
+
         return AuthResponse(
-            access_token=access_token,
+            access_token=session_result["access_token"],
             token_type="bearer",
             user_type="guest",
-            config=guest_config.__dict__,
-            providers=providers_info
+            config=sanitize_config(guest_config),
+            providers=providers_info,
+            session_id=session_result["session_id"],
+            expires_at=session_result["expires_at"].isoformat()
         )
         
     except HTTPException:
@@ -215,36 +240,24 @@ async def get_auth_config(current_user: Dict[str, Any] = Depends(get_current_use
     """获取当前用户的API配置"""
     try:
         config = auth_manager.get_user_api_config(current_user)
-        return {
+        providers_payload = model_registry.build_provider_payload(config)
+        response = {
             "user_type": current_user.get("user_type"),
-            "config": config,
-            "providers": {
-                "llm_providers": [
-                    {
-                        "name": "openai",
-                        "models": ["gpt-4o-mini", "gpt-4o"],
-                        "available": bool(config.get("llm_api_key"))
-                    },
-                    {
-                        "name": "gemini",
-                        "models": ["gemini-2.0-flash-exp", "gemini-1.5-flash"],
-                        "available": bool(config.get("llm_api_key"))
-                    }
-                ],
-                "embedding_providers": [
-                    {
-                        "name": "openai",
-                        "models": ["text-embedding-3-small"],
-                        "available": bool(config.get("embedding_api_key"))
-                    },
-                    {
-                        "name": "gemini",
-                        "models": ["models/embedding-001"],
-                        "available": bool(config.get("embedding_api_key"))
-                    }
-                ]
-            }
+            "config": sanitize_config(config),
+            "providers": providers_payload,
         }
+
+        if current_user.get("user_type") == "guest":
+            session_id = current_user.get("session_id")
+            if session_id:
+                session = auth_manager.get_guest_session(session_id)
+                if session:
+                    response["session"] = {
+                        "session_id": session.session_id,
+                        "expires_at": session.expires_at.isoformat(),
+                    }
+
+        return response
     except Exception as e:
         print(f"❌ 获取用户配置失败: {str(e)}")
         raise HTTPException(status_code=500, detail="获取用户配置失败")
@@ -262,42 +275,62 @@ async def get_auth_status():
 async def get_providers(current_user: Optional[Dict[str, Any]] = Depends(get_current_user_optional)):
     """获取AI提供商信息（游客可访问）"""
     try:
-        base_config = auth_manager.get_user_api_config(current_user or {"user_type": "guest"})
+        base_user = current_user or {"user_type": "system"}
+        base_config = auth_manager.get_user_api_config(base_user)
+        providers_payload = model_registry.build_provider_payload(base_config)
+        sanitized = sanitize_config(base_config)
         return {
-            "llm_providers": [
-                {
-                    "name": "openai",
-                    "models": ["gpt-4o-mini", "gpt-4o"],
-                    "available": bool(base_config.get("llm_api_key"))
-                },
-                {
-                    "name": "gemini",
-                    "models": ["gemini-2.0-flash-exp", "gemini-1.5-flash"],
-                    "available": bool(base_config.get("llm_api_key"))
-                }
-            ],
-            "embedding_providers": [
-                {
-                    "name": "openai",
-                    "models": ["text-embedding-3-small"],
-                    "available": bool(base_config.get("embedding_api_key"))
-                },
-                {
-                    "name": "gemini",
-                    "models": ["models/embedding-001"],
-                    "available": bool(base_config.get("embedding_api_key"))
-                }
-            ],
+            **providers_payload,
             "current_config": {
-                "llm_provider": base_config.get("llm_provider"),
-                "llm_model": base_config.get("llm_model"),
-                "embedding_provider": base_config.get("embedding_provider"),
-                "embedding_model": base_config.get("embedding_model"),
+                "llm_provider": sanitized.get("llm_provider"),
+                "llm_model": sanitized.get("llm_model"),
+                "embedding_provider": sanitized.get("embedding_provider"),
+                "embedding_model": sanitized.get("embedding_model"),
             }
         }
     except Exception as e:
         print(f"❌ 获取提供商信息失败: {str(e)}")
         raise HTTPException(status_code=500, detail="获取提供商信息失败")
+
+
+@app.get("/sessions", response_model=List[ConversationSummary])
+async def list_conversations_endpoint(current_user: Dict[str, Any] = Depends(get_current_user)):
+    user_type = current_user.get("user_type")
+    if user_type == "guest":
+        session_id = current_user.get("session_id")
+        if not session_id:
+            return []
+        conversation = conversation_store.get_conversation(session_id)
+        if not conversation:
+            return []
+        return [ConversationSummary(**conversation.__dict__)]
+
+    conversations = conversation_store.list_conversations()
+    return [ConversationSummary(**conv.__dict__) for conv in conversations]
+
+
+@app.get("/sessions/{session_id}/messages", response_model=List[ConversationMessageModel])
+async def get_conversation_messages(session_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    ensure_session_access(session_id, current_user)
+    messages = conversation_store.get_messages(session_id)
+    return [ConversationMessageModel(**msg.__dict__) for msg in messages]
+
+
+@app.post("/sessions/{session_id}/rename", response_model=ConversationSummary)
+async def rename_conversation(session_id: str, payload: RenameConversationRequest, current_user: Dict[str, Any] = Depends(get_current_user)):
+    ensure_session_access(session_id, current_user)
+    conversation_store.update_title(session_id, payload.title)
+    conversation = conversation_store.get_conversation(session_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return ConversationSummary(**conversation.__dict__)
+
+
+@app.delete("/sessions/{session_id}")
+async def delete_conversation_endpoint(session_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    ensure_session_access(session_id, current_user)
+    conversation_store.delete_conversation(session_id)
+    return {"status": "deleted", "session_id": session_id}
 
 # ===== 受保护的API（需要认证） =====
 
@@ -348,19 +381,38 @@ async def query_once(
 @app.get("/stream", dependencies=[Depends(get_current_user)])
 async def stream_query(
     question: str = Query(...),
+    session_id: Optional[str] = Query(None),
     current_user: Dict[str, Any] = Depends(get_current_user),
     user_config: Dict[str, Any] = Depends(get_user_config)
 ):
     """流式查询（需要认证）"""
+    session_reference = session_id or current_user.get("session_id")
+    user_type = current_user.get("user_type", "guest")
+
+    if session_reference:
+        conversation_store.append_message(session_reference, "user", question, user_type)
+
+    assistant_chunks: List[str] = []
+
     async def generate():
         try:
             for chunk in rag_pipeline.stream_query(question, user_config):
+                if chunk:
+                    assistant_chunks.append(chunk)
                 yield f"data: {json.dumps({'chunk': chunk}, ensure_ascii=False)}\n\n"
                 await asyncio.sleep(0.01)  # 小延迟确保流式效果
             yield f"data: {json.dumps({'status': 'done'}, ensure_ascii=False)}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
-    
+        finally:
+            if session_reference and assistant_chunks:
+                conversation_store.append_message(
+                    session_reference,
+                    "assistant",
+                    "".join(assistant_chunks),
+                    user_type,
+                )
+
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
@@ -393,12 +445,15 @@ async def upload_file(
                 detail=f"不支持的文件类型。支持的类型: {', '.join(allowed_extensions)}"
             )
         
-        # 检查文件大小 (最大10MB)
+        # 检查文件大小
         file_content = await file.read()
-        if len(file_content) > 10 * 1024 * 1024:
+        user_type = current_user.get("user_type")
+        size_limit = 50 * 1024 * 1024 if user_type == "guest" else None
+
+        if size_limit is not None and len(file_content) > size_limit:
             raise HTTPException(
-                status_code=400, 
-                detail="文件大小超过10MB限制"
+                status_code=400,
+                detail="游客模式单个文件最大支持50MB"
             )
         
         print(f"📤 正在上传文件: {file.filename}")

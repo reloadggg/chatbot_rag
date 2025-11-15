@@ -1,74 +1,66 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { apiUrl } from '../../lib/api';
-import { LockIcon, UserIcon } from '../../components/icons';
+import { authManager, type AuthData } from '../lib/auth';
+import { LockIcon, UserIcon, InfoIcon } from '../../components/icons';
 
-interface AuthResponse {
-  access_token: string;
-  token_type: string;
-  user_type: string;
-  config: Record<string, any>;
-  providers: {
-    llm_providers: Array<{
-      name: string;
-      models: string[];
-      available: boolean;
-    }>;
-    embedding_providers: Array<{
-      name: string;
-      models: string[];
-      available: boolean;
-    }>;
+interface AuthStatus {
+  system_mode_enabled: boolean;
+  auth_required: boolean;
+  supported_modes: string[];
+}
+
+interface ProviderModel {
+  name: string;
+  models: string[];
+  available: boolean;
+}
+
+interface ProvidersResponse {
+  llm_providers: ProviderModel[];
+  embedding_providers: ProviderModel[];
+  current_config: {
+    llm_provider: string;
+    llm_model: string;
+    embedding_provider: string;
+    embedding_model: string;
   };
 }
 
 export default function LoginPage() {
   const router = useRouter();
-  const [authMode, setAuthMode] = useState<'system' | 'guest'>('guest');
+  const [status, setStatus] = useState<AuthStatus | null>(null);
+  const [providers, setProviders] = useState<ProvidersResponse | null>(null);
   const [systemPassword, setSystemPassword] = useState('');
-  const [provider, setProvider] = useState('openai');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [authStatus, setAuthStatus] = useState<any>(null);
+  const [guestSessionId, setGuestSessionId] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [isSystemLoading, setIsSystemLoading] = useState(false);
+  const [isGuestLoading, setIsGuestLoading] = useState(false);
 
-  // 游客模式配置
-  const [guestConfig, setGuestConfig] = useState({
-    llm_provider: 'openai',
-    llm_model: 'gpt-4o-mini',
-    llm_api_key: '',
-    llm_base_url: '',
-    embedding_provider: 'openai',
-    embedding_model: 'text-embedding-3-small',
-    embedding_api_key: '',
-    embedding_base_url: ''
-  });
-
-  // 获取认证状态
   useEffect(() => {
-    fetchAuthStatus();
-  }, []);
+    const load = async () => {
+      try {
+        const [statusRes, providersRes] = await Promise.all([
+          fetch(apiUrl('/auth/status')),
+          fetch(apiUrl('/providers')),
+        ]);
 
-  const fetchAuthStatus = async () => {
-    try {
-      const response = await fetch(apiUrl('/auth/status'));
-      if (response.ok) {
-        const data = await response.json();
-        setAuthStatus(data);
-        
-        // 根据系统模式设置默认认证模式
-        if (data.system_mode_enabled) {
-          setAuthMode('system');
-        } else {
-          setAuthMode('guest');
+        if (statusRes.ok) {
+          setStatus(await statusRes.json());
         }
+        if (providersRes.ok) {
+          setProviders(await providersRes.json());
+        }
+      } catch (err) {
+        console.error('加载登录上下文失败', err);
       }
-    } catch (error) {
-      console.error('获取认证状态失败:', error);
-    }
-  };
+    };
+
+    load();
+  }, []);
 
   const handleSystemLogin = async () => {
     if (!systemPassword) {
@@ -76,470 +68,214 @@ export default function LoginPage() {
       return;
     }
 
-    setIsLoading(true);
-    setError('');
+    setIsSystemLoading(true);
+    setError(null);
+    setSuccess(null);
 
     try {
       const response = await fetch(apiUrl('/auth/login'), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          password: systemPassword,
-          provider: provider
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: systemPassword, provider: 'env' }),
       });
 
-      if (response.ok) {
-        const data: AuthResponse = await response.json();
-        
-        // 保存token到localStorage
-        localStorage.setItem('access_token', data.access_token);
-        localStorage.setItem('user_type', data.user_type);
-        localStorage.setItem('user_config', JSON.stringify(data.config));
-        
-        // 跳转到主页
-        router.push('/');
-      } else {
-        const error = await response.json();
-        setError(error.detail || '登录失败');
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        throw new Error(detail.detail || '系统登录失败');
       }
-    } catch (error) {
-      console.error('登录失败:', error);
-      setError('网络连接失败');
+
+      const data = (await response.json()) as AuthData;
+      authManager.setAuthData(data);
+      router.push('/chat');
+    } catch (err: any) {
+      setError(err.message || '系统登录失败');
     } finally {
-      setIsLoading(false);
+      setIsSystemLoading(false);
     }
   };
 
-  const handleGuestLogin = async () => {
-    // 验证配置
-    const errors = validateGuestConfig();
-    if (errors.length > 0) {
-      setError(errors.join('\n'));
-      return;
-    }
-
-    setIsLoading(true);
-    setError('');
+  const handleGuestLogin = async (resumeSessionId?: string) => {
+    setIsGuestLoading(true);
+    setError(null);
+    setSuccess(null);
 
     try {
+      const payload = resumeSessionId ? { session_id: resumeSessionId.trim() } : {};
       const response = await fetch(apiUrl('/auth/guest'), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(guestConfig),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
 
-      if (response.ok) {
-        const data: AuthResponse = await response.json();
-        
-        // 保存token到localStorage
-        localStorage.setItem('access_token', data.access_token);
-        localStorage.setItem('user_type', data.user_type);
-        localStorage.setItem('user_config', JSON.stringify(data.config));
-        localStorage.setItem('providers', JSON.stringify(data.providers));
-        
-        // 跳转到主页
-        router.push('/');
-      } else {
-        const error = await response.json();
-        setError(error.detail || '登录失败');
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        throw new Error(detail.detail || '游客会话创建失败');
       }
-    } catch (error) {
-      console.error('游客登录失败:', error);
-      setError('网络连接失败');
+
+      const data = (await response.json()) as AuthData;
+      authManager.setAuthData(data);
+
+      if (data.session_id) {
+        try {
+          await navigator.clipboard.writeText(data.session_id);
+          setSuccess(`已为您复制临时会话 ID：${data.session_id}`);
+        } catch (err) {
+          setSuccess(`临时会话 ID：${data.session_id}`);
+        }
+      }
+
+      router.push('/chat');
+    } catch (err: any) {
+      setError(err.message || '游客登录失败');
     } finally {
-      setIsLoading(false);
+      setIsGuestLoading(false);
     }
   };
 
-  const validateGuestConfig = (): string[] => {
-    const errors: string[] = [];
-
-    // 验证LLM配置
-    if (!guestConfig.llm_api_key) {
-      errors.push('请输入LLM API密钥');
-    }
-    if (guestConfig.llm_provider === 'openai' && !guestConfig.llm_api_key.startsWith('sk-')) {
-      errors.push('OpenAI API密钥格式不正确');
-    }
-    if (guestConfig.llm_base_url && !guestConfig.llm_base_url.startsWith('http')) {
-      errors.push('LLM BaseURL格式不正确');
-    }
-
-    // 验证嵌入模型配置
-    if (!guestConfig.embedding_api_key) {
-      errors.push('请输入嵌入模型API密钥');
-    }
-    if (guestConfig.embedding_provider === 'openai' && !guestConfig.embedding_api_key.startsWith('sk-')) {
-      errors.push('OpenAI嵌入API密钥格式不正确');
-    }
-    if (guestConfig.embedding_base_url && !guestConfig.embedding_base_url.startsWith('http')) {
-      errors.push('嵌入模型BaseURL格式不正确');
-    }
-
-    return errors;
-  };
-
-  const handleProviderChange = (provider: string, field: string, value: string) => {
-    const config = { ...guestConfig };
-    
-    if (field === 'llm_provider') {
-      config.llm_provider = provider;
-      config.llm_model = provider === 'openai' ? 'gpt-4o-mini' : 'gemini-2.0-flash-exp';
-      config.llm_base_url = provider === 'openai' ? 'https://api.openai.com/v1' : 'https://generativelanguage.googleapis.com/v1beta';
-    } else if (field === 'embedding_provider') {
-      config.embedding_provider = provider;
-      config.embedding_model = provider === 'openai' ? 'text-embedding-3-small' : 'models/embedding-001';
-      config.embedding_base_url = provider === 'openai' ? 'https://api.openai.com/v1' : 'https://generativelanguage.googleapis.com/v1beta';
-    }
-    
-    setGuestConfig(config);
-  };
-
-  const handleInputChange = (field: string, value: string) => {
-    setGuestConfig(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
-
-  const handleAuthModeChange = (mode: 'system' | 'guest') => {
-    setAuthMode(mode);
-    setError('');
-  };
+  const activeSessionId = authManager.getSessionId();
+  const sessionExpiry = authManager.getSessionExpiry();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* 头部 */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">RAG知识库机器人</h1>
-              <p className="text-gray-600 mt-1">智能问答系统</p>
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-10 px-6 py-12">
+        <header className="flex flex-col gap-2">
+          <span className="text-sm uppercase tracking-[0.4em] text-slate-500">RAG Workspace</span>
+          <h1 className="text-4xl font-semibold text-white md:text-5xl">登录到知识对话空间</h1>
+          <p className="max-w-3xl text-base text-slate-400">
+            系统用户可使用环境变量中的密码获得完全访问权限。未持有密码的访客可以申请 12 小时的临时会话，聊天与上传均会自动保存，可凭会话 ID 再次进入。
+          </p>
+        </header>
+
+        {(error || success) && (
+          <div
+            className={`rounded-xl border px-4 py-3 text-sm ${
+              error ? 'border-red-500/40 bg-red-500/10 text-red-200' : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
+            }`}
+          >
+            {error || success}
+          </div>
+        )}
+
+        <main className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <section className="rounded-3xl border border-white/10 bg-white/[0.02] p-8 shadow-2xl shadow-black/40 backdrop-blur">
+            <div className="flex items-center gap-3 text-sm font-medium text-slate-300">
+              <LockIcon className="h-5 w-5 text-sky-400" />
+              <span>系统密码登录</span>
             </div>
-            <Link 
-              href="/"
-              className="text-gray-600 hover:text-gray-900 px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
+            <h2 className="mt-4 text-2xl font-semibold text-white">拥有运维密码？</h2>
+            <p className="mt-2 text-sm text-slate-400">
+              输入部署时在 <code className="rounded bg-slate-900 px-1.5 py-0.5 text-xs text-slate-200">.env</code> 中设置的 <code>AUTH_PASSWORD</code> 即可获得完整的知识库和模型权限。
+            </p>
+            {status && (
+              <p className="mt-2 text-xs text-slate-500">
+                {status.system_mode_enabled
+                  ? '系统模式已启用，验证成功后可管理模型与知识库。'
+                  : '尚未配置系统密码，目前仅支持临时会话模式。'}
+              </p>
+            )}
+
+            <label className="mt-6 block text-sm font-medium text-slate-200">系统密码</label>
+            <input
+              type="password"
+              value={systemPassword}
+              onChange={(event) => setSystemPassword(event.target.value)}
+              placeholder="请输入系统密码"
+              className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white outline-none ring-0 transition focus:border-sky-400 focus:bg-white/10"
+            />
+
+            <button
+              onClick={handleSystemLogin}
+              disabled={isSystemLoading}
+              className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-sky-500 px-4 py-3 text-base font-medium text-white transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-sky-500/50"
             >
-              ← 返回主页
-            </Link>
-          </div>
-        </div>
-      </header>
+              {isSystemLoading ? '登录中…' : '进入管理控制台'}
+            </button>
 
-      <main className="max-w-4xl mx-auto px-4 py-8">
-        <div className="bg-white p-8 rounded-lg shadow-lg border">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">系统登录</h2>
-
-          {/* 认证模式选择 */}
-          <div className="mb-6">
-            <div className="flex bg-gray-100 rounded-lg p-1">
-              <button
-                onClick={() => handleAuthModeChange('system')}
-                className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  authMode === 'system'
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                <span className="inline-flex items-center justify-center gap-2">
-                  <LockIcon className="h-4 w-4" />
-                  系统登录
-                </span>
-              </button>
-              <button
-                onClick={() => handleAuthModeChange('guest')}
-                className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  authMode === 'guest'
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                <span className="inline-flex items-center justify-center gap-2">
-                  <UserIcon className="h-4 w-4" />
-                  游客登录
-                </span>
-              </button>
-            </div>
-          </div>
-
-          {/* 错误提示 */}
-          {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-red-800">{error}</p>
-            </div>
-          )}
-
-          {/* 系统登录模式 */}
-          {authMode === 'system' && (
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  系统密码
-                </label>
-                <input
-                  type="password"
-                  value={systemPassword}
-                  onChange={(e) => setSystemPassword(e.target.value)}
-                  placeholder="请输入系统密码"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  默认提供商
-                </label>
-                <select
-                  value={provider}
-                  onChange={(e) => setProvider(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="env">环境变量配置</option>
-                  <option value="openai">OpenAI</option>
-                  <option value="gemini">Google Gemini</option>
-                </select>
-              </div>
-
-              <button
-                onClick={handleSystemLogin}
-                disabled={isLoading}
-                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isLoading ? '登录中...' : '系统登录'}
-              </button>
-            </div>
-          )}
-
-          {/* 游客登录模式 */}
-          {authMode === 'guest' && (
-            <div className="space-y-6">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                <h3 className="font-medium text-blue-900 mb-2">游客模式说明</h3>
-                <p className="text-sm text-blue-800">
-                  游客模式下，您需要自行提供AI提供商的API密钥。系统不会保存您的密钥，所有配置仅在当前会话中有效。
-                </p>
-              </div>
-
-              {/* LLM配置 */}
-              <div className="border rounded-lg p-4">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">语言模型配置</h3>
-                
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      提供商
-                    </label>
-                    <div className="flex space-x-4">
-                      <button
-                        onClick={() => handleProviderChange('openai', 'llm_provider', 'openai')}
-                        className={`px-4 py-2 rounded-lg border ${
-                          guestConfig.llm_provider === 'openai'
-                            ? 'bg-blue-600 text-white border-blue-600'
-                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                        }`}
-                      >
-                        OpenAI
-                      </button>
-                      <button
-                        onClick={() => handleProviderChange('gemini', 'llm_provider', 'gemini')}
-                        className={`px-4 py-2 rounded-lg border ${
-                          guestConfig.llm_provider === 'gemini'
-                            ? 'bg-blue-600 text-white border-blue-600'
-                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                        }`}
-                      >
-                        Google Gemini
-                      </button>
+            {providers && (
+              <div className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-5">
+                <h3 className="text-sm font-semibold text-slate-200">模型概览</h3>
+                <p className="mt-1 text-xs text-slate-400">以下列表来自最新的提供商接口。</p>
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  {providers.llm_providers.map((provider) => (
+                    <div key={provider.name} className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                      <div className="flex items-center justify-between text-sm text-slate-300">
+                        <span className="font-semibold uppercase tracking-wide text-slate-200">{provider.name}</span>
+                        <span className={provider.available ? 'text-emerald-300' : 'text-slate-500'}>
+                          {provider.available ? '已配置' : '待配置'}
+                        </span>
+                      </div>
+                      <ul className="mt-3 space-y-1 text-xs text-slate-400">
+                        {provider.models.slice(0, 6).map((model) => (
+                          <li key={model} className="truncate">{model}</li>
+                        ))}
+                      </ul>
                     </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      模型
-                    </label>
-                    <select
-                      value={guestConfig.llm_model}
-                      onChange={(e) => handleInputChange('llm_model', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      {guestConfig.llm_provider === 'openai' ? (
-                        <>
-                          <option value="gpt-4o-mini">GPT-4o Mini</option>
-                          <option value="gpt-4o">GPT-4o</option>
-                          <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-                        </>
-                      ) : (
-                        <>
-                          <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash</option>
-                          <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-                          <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-                        </>
-                      )}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      API 密钥 {guestConfig.llm_provider === 'openai' && <span className="text-red-500">*</span>}
-                    </label>
-                    <input
-                      type="password"
-                      value={guestConfig.llm_api_key}
-                      onChange={(e) => handleInputChange('llm_api_key', e.target.value)}
-                      placeholder={guestConfig.llm_provider === 'openai' ? 'sk-...' : '输入Gemini API密钥'}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Base URL（可选）
-                    </label>
-                    <input
-                      type="text"
-                      value={guestConfig.llm_base_url}
-                      onChange={(e) => handleInputChange('llm_base_url', e.target.value)}
-                      placeholder={guestConfig.llm_provider === 'openai' ? 'https://api.openai.com/v1' : 'https://generativelanguage.googleapis.com/v1beta'}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
+                  ))}
                 </div>
               </div>
+            )}
+          </section>
 
-              {/* 嵌入模型配置 */}
-              <div className="border rounded-lg p-4">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">嵌入模型配置</h3>
-                
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      提供商
-                    </label>
-                    <div className="flex space-x-4">
-                      <button
-                        onClick={() => handleProviderChange('openai', 'embedding_provider', 'openai')}
-                        className={`px-4 py-2 rounded-lg border ${
-                          guestConfig.embedding_provider === 'openai'
-                            ? 'bg-green-600 text-white border-green-600'
-                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                        }`}
-                      >
-                        OpenAI
-                      </button>
-                      <button
-                        onClick={() => handleProviderChange('gemini', 'embedding_provider', 'gemini')}
-                        className={`px-4 py-2 rounded-lg border ${
-                          guestConfig.embedding_provider === 'gemini'
-                            ? 'bg-green-600 text-white border-green-600'
-                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                        }`}
-                      >
-                        Google Gemini
-                      </button>
-                    </div>
-                  </div>
+          <section className="flex h-full flex-col justify-between gap-6 rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900/80 to-slate-900/30 p-8 shadow-2xl shadow-black/40 backdrop-blur">
+            <div>
+              <div className="flex items-center gap-3 text-sm font-medium text-slate-300">
+                <UserIcon className="h-5 w-5 text-emerald-400" />
+                <span>游客模式</span>
+              </div>
+              <h2 className="mt-4 text-2xl font-semibold text-white">无需密码，快速体验</h2>
+              <p className="mt-2 text-sm text-slate-400">
+                游客会话保存 12 小时，允许上传不超过 50 MB 的文件。复制会话 ID 可以在有效期内重新进入对话。
+              </p>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      模型
-                    </label>
-                    <select
-                      value={guestConfig.embedding_model}
-                      onChange={(e) => handleInputChange('embedding_model', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                    >
-                      {guestConfig.embedding_provider === 'openai' ? (
-                        <>
-                          <option value="text-embedding-3-small">Text Embedding 3 Small</option>
-                          <option value="text-embedding-3-large">Text Embedding 3 Large</option>
-                        </>
-                      ) : (
-                        <>
-                          <option value="models/embedding-001">Embedding 001</option>
-                        </>
-                      )}
-                    </select>
-                  </div>
+              <div className="mt-6 space-y-4">
+                <button
+                  onClick={() => handleGuestLogin()}
+                  disabled={isGuestLoading}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-3 text-base font-medium text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-500/50"
+                >
+                  {isGuestLoading ? '生成会话中…' : '生成新的临时会话'}
+                </button>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      API 密钥 {guestConfig.embedding_provider === 'openai' && <span className="text-red-500">*</span>}
-                    </label>
-                    <input
-                      type="password"
-                      value={guestConfig.embedding_api_key}
-                      onChange={(e) => handleInputChange('embedding_api_key', e.target.value)}
-                      placeholder={guestConfig.embedding_provider === 'openai' ? 'sk-...' : '输入Gemini API密钥'}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Base URL（可选）
-                    </label>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-300">已有会话 ID？</label>
+                  <div className="mt-2 flex flex-col gap-3 md:flex-row">
                     <input
                       type="text"
-                      value={guestConfig.embedding_base_url}
-                      onChange={(e) => handleInputChange('embedding_base_url', e.target.value)}
-                      placeholder={guestConfig.embedding_provider === 'openai' ? 'https://api.openai.com/v1' : 'https://generativelanguage.googleapis.com/v1beta'}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                      value={guestSessionId}
+                      onChange={(event) => setGuestSessionId(event.target.value)}
+                      placeholder="输入 36 位会话 ID"
+                      className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white outline-none transition focus:border-emerald-400 focus:bg-white/10"
                     />
+                    <button
+                      onClick={() => handleGuestLogin(guestSessionId)}
+                      disabled={!guestSessionId || isGuestLoading}
+                      className="inline-flex items-center justify-center rounded-xl border border-emerald-400/50 px-4 py-2 text-sm font-medium text-emerald-200 transition hover:bg-emerald-400/10 disabled:cursor-not-allowed disabled:border-emerald-400/20 disabled:text-emerald-200/50"
+                    >
+                      恢复会话
+                    </button>
                   </div>
+                  <p className="mt-3 flex items-start gap-2 text-xs text-slate-400">
+                    <InfoIcon className="mt-0.5 h-4 w-4 text-emerald-300" />
+                    如果浏览器已保存临时会话，将自动填充并续期，无需再次复制。
+                  </p>
                 </div>
               </div>
-
-              {/* 快速配置按钮 */}
-              <div className="flex space-x-4">
-                <button
-                  onClick={() => setGuestConfig({
-                    llm_provider: 'openai',
-                    llm_model: 'gpt-4o-mini',
-                    llm_api_key: '',
-                    llm_base_url: 'https://api.openai.com/v1',
-                    embedding_provider: 'openai',
-                    embedding_model: 'text-embedding-3-small',
-                    embedding_api_key: '',
-                    embedding_base_url: 'https://api.openai.com/v1'
-                  })}
-                  className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
-                >
-                  OpenAI 默认配置
-                </button>
-                <button
-                  onClick={() => setGuestConfig({
-                    llm_provider: 'gemini',
-                    llm_model: 'gemini-2.0-flash-exp',
-                    llm_api_key: '',
-                    llm_base_url: 'https://generativelanguage.googleapis.com/v1beta',
-                    embedding_provider: 'gemini',
-                    embedding_model: 'models/embedding-001',
-                    embedding_api_key: '',
-                    embedding_base_url: 'https://generativelanguage.googleapis.com/v1beta'
-                  })}
-                  className="px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
-                >
-                  Gemini 默认配置
-                </button>
-              </div>
-
-              <button
-                onClick={handleGuestLogin}
-                disabled={isLoading}
-                className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isLoading ? '登录中...' : '游客登录'}
-              </button>
             </div>
-          )}
-        </div>
-      </main>
+
+            {(activeSessionId || sessionExpiry) && (
+              <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 p-5 text-sm text-emerald-100">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-emerald-200">当前临时会话</h3>
+                {activeSessionId && (
+                  <p className="mt-2 break-all text-xs text-emerald-100/90">{activeSessionId}</p>
+                )}
+                {sessionExpiry && (
+                  <p className="mt-1 text-xs text-emerald-200/70">有效期至：{new Date(sessionExpiry).toLocaleString()}</p>
+                )}
+              </div>
+            )}
+          </section>
+        </main>
+      </div>
     </div>
   );
 }
