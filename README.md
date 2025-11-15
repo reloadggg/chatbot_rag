@@ -1,403 +1,165 @@
-# RAG知识库机器人
+# Chatbot RAG
 
-基于RAG（检索增强生成）的中文知识库问答机器人，采用FastAPI + LangChain后端和Next.js + Tailwind CSS前端架构。
+一个采用 FastAPI + LangChain 后端与 Next.js 前端的检索增强生成（RAG）聊天与知识库管理项目。仓库包含后端 API、Web 聊天界面、文档管理页以及可选的 Gemini 多模态扩展，目标是提供可自部署的中文知识库问答体验。
 
-## 🎯 项目概述
+## 功能概览
 
-构建一个轻量级的**个人知识库问答机器人**，通过上传文档实现检索增强生成（RAG）。系统由前后端组成：
+- **RAG 对话服务**：内置文档向量化、相似度检索、LangChain 推理链，支持 SSE 流式回答。
+- **知识库管理**：上传、列表、统计、删除接口与前端页面，所有操作都需要携带认证令牌。
+- **多提供商配置**：支持系统用户使用环境变量配置，也允许游客用户提交自定义的 OpenAI / Gemini API Key。
+- **苹果风格 Web UI**：聊天页采用类 iMessage 的玻璃拟态布局、自动伸缩输入框与快捷提示卡片。
+- **可选 Gemini 能力**：若提供 Google API Key 并安装 `google-generativeai`，可调用 Gemini 文件处理与多模态接口。
 
-- **前端**：Next.js + Tailwind，提供聊天界面和知识库管理
-- **后端**：FastAPI + LangChain，实现RAG流程和文件处理
-- **模型**：全部使用在线API（OpenAI /openrouter / Qdrant Cloud等）
-- **配置**：通过`.env`动态控制模型、向量库、参数
-- **特性**：SSE流式输出、中文提示、文件上传、知识库管理
-
-## 🆕 新增功能
-
-### 📁 文件上传和知识库管理 (M6)
-- ✅ **多格式文件上传**：支持PDF、TXT、MD、JSON格式
-- ✅ **自动文档处理**：文本提取 → 智能分块 → 向量化存储
-- ✅ **知识库管理界面**：文档列表、上传、删除、统计信息
-- ✅ **PDF文本提取**：自动从PDF文件中提取文本内容
-- ✅ **实时统计面板**：显示文档数量、总大小、向量统计
-- ✅ **统一导航**：方便切换问答和文档管理功能
-
-## 🏗️ 项目结构
+## 目录结构
 
 ```
-rag-chatbot/
-├── server/                    # FastAPI + LangChain 后端
+.
+├── server/                # FastAPI 应用与 LangChain RAG 管线
 │   ├── app/
-│   │   ├── __init__.py
-│   │   ├── main.py           # FastAPI应用与路由（包含文件上传API）
-│   │   ├── settings.py       # 加载.env并打印模型中文信息
-│   │   ├── rag.py           # RAG管道逻辑（包含文档添加功能）
-│   │   ├── document_processor.py  # 文档处理核心逻辑
-│   │   └── tests/
-│   │       ├── __init__.py
-│   │       └── test_main.py # 测试用例
-│   ├── uploads/             # 上传文件存储目录
-│   ├── data/
-│   │   └── chroma/          # 向量数据存储
-│   ├── .env                 # 环境变量配置
-│   ├── .env.example         # 环境变量模板
-│   └── requirements.txt     # Python依赖
-│
-├── web/                     # Next.js 前端
-│   ├── app/
-│   │   ├── globals.css      # 全局样式
-│   │   ├── layout.tsx       # 布局组件（包含统一导航）
-│   │   ├── page.tsx         # 首页（更新导航）
-│   │   ├── chat/
-│   │   │   └── page.tsx     # 聊天页面（更新导航）
-│   │   └── docs/
-│   │       └── page.tsx     # 知识库管理页面（新增）
-│   ├── .env.local           # 前端环境变量
-│   ├── package.json         # Node.js依赖
-│   ├── tailwind.config.js   # Tailwind配置
-│   └── next.config.js       # Next.js配置
-│
-├── README.md               # 项目文档
-├── CONFIG_GUIDE.md         # API配置指南
-├── WSL_ACCESS_GUIDE.md     # WSL访问指南
-├── start.sh               # 一键启动脚本
-└── PROJECT_SUMMARY.md     # 项目完成总结
+│   │   ├── auth.py        # JWT 登录、游客令牌与配置分发
+│   │   ├── document_processor.py
+│   │   ├── gemini_routes.py
+│   │   ├── main.py        # HTTP 路由：auth、query、stream、documents 等
+│   │   ├── rag.py         # LangChain 组件组装与查询封装
+│   │   ├── settings.py    # Pydantic 环境配置
+│   │   ├── tests/         # pytest 用例
+│   │   └── user_config.py
+│   ├── requirements.txt
+│   └── test_api.py        # 可选的端到端脚本
+├── web/                   # Next.js 14 + Tailwind 前端
+│   ├── app/chat/page.tsx  # ChatGPT 风格会话界面
+│   ├── app/docs/page.tsx  # 知识库文档管理界面
+│   ├── app/login/page.tsx # 系统/游客登录
+│   ├── app/globals.css    # 全局样式（含玻璃拟态布局）
+│   └── ...
+├── deploy/nginx/          # Docker Compose 使用的 Nginx 配置
+├── docker-compose.yml
+├── start.sh               # 可选的本地一键启动脚本（WSL 辅助）
+└── start_simple.sh
 ```
 
-## ⚙️ 技术栈
+## 环境要求
 
-| 模块 | 说明 |
-|------|------|
-| **后端** | FastAPI、LangChain、LangChain-OpenAI、Chroma或Qdrant |
-| **前端** | Next.js、React、Tailwind CSS |
-| **模型** | 在线API（OpenAI / Gemini） |
-| **嵌入** | text-embedding-3-small（或同类） |
-| **语言模型** | gpt-4o-mini / Gemini系列 |
-| **数据库** | 本地Chroma或Qdrant Cloud |
-| **通信协议** | SSE（Server-Sent Events） |
-| **文件处理** | PyPDF2、文本分割器、Google Generative AI |
+- Python 3.10+
+- Node.js 18+ 与 [pnpm](https://pnpm.io)
+- OpenAI、OpenRouter 或兼容的 LLM / 向量服务 API Key（最少需要一个 LLM 与一个嵌入模型）
+- （可选）Google Gemini API Key 与 `google-generativeai` 依赖，用于启用多模态路由
 
-## 🚀 快速开始
+## 配置
 
-### 🆕 Gemini 支持（可选）
-系统现已支持 **Google Gemini** 作为AI提供商，提供原生文件搜索和多模态AI功能：
+### 后端（`server/.env`）
 
-```bash
-# 配置使用Gemini（可选）
-echo "GEMINI_API_KEY=your-gemini-api-key" >> server/.env
-echo "LLM_PROVIDER=gemini" >> server/.env
-echo "EMBEDDING_PROVIDER=gemini" >> server/.env
+后端使用 Pydantic Settings 读取 `server/.env`。请创建该文件并补齐至少以下字段：
 
-# 获取Gemini API密钥: https://makersuite.google.com/app/apikey
-
-# 如需启用文件上传/清理接口，可额外安装（可选）
-pip install google-generativeai==0.8.5
-```
-
-### 环境要求
-- Python 3.10（与 `server/app/settings.py` 的依赖版本一致）
-- Node.js 18+、pnpm
-- OpenAI / Gemini / Qdrant API Key（视需求配置）
-
-### 配置 `.env`
-
-```bash
-cd server
-cp .env.example .env
-```
-
-至少填写以下字段（示例）：
-
-| 变量 | 说明 |
-| --- | --- |
-| `SYSTEM_PASSWORD` | 后台登录密码（≥8位，供 `/auth/login` 使用） |
-| `JWT_SECRET_KEY` | JWT 签名密钥 |
-| `LLM_PROVIDER` / `LLM_MODEL` / `LLM_API_KEY` | 语言模型配置，可选 `openai` 或 `gemini` |
-| `EMBEDDING_PROVIDER` / `EMBEDDING_MODEL` / `EMBEDDING_API_KEY` | 嵌入模型配置 |
-| `GEMINI_API_KEY` / `GEMINI_MODEL` | 仅在使用 Gemini 时需要 |
-
-> 🚫 请勿把真实密钥提交到 Git 仓库，可通过 `.env.example` 扩展占位字段。
-
-### 后端启动
-
-```bash
-cd server
-python -m venv .venv
-source .venv/bin/activate  # Windows 使用 .venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
-```
-
-服务启动后可通过 `http://localhost:8000/docs` 查看 FastAPI 文档，并在终端看到中文状态日志（🌏 / 📚 / 🧠 等）。
-
-### 前端启动
-
-```bash
-cd web
-pnpm install
-cp .env.local.example .env.local   # 如需自定义 API 地址
-# 确认 .env.local 里的 NEXT_PUBLIC_API_URL 与 FastAPI 端口一致（默认 http://localhost:8000）
-pnpm dev --port 3000
-```
-
-访问 http://localhost:3000/chat 进入聊天界面，确保 `.env.local` 的后端地址与实际端口一致。
-
-### 测试与质量检查
-
-按照项目规范在提交前执行：
-
-```bash
-# 后端
-cd server
-ruff check app
-pytest -q
-
-# 前端
-cd web
-pnpm lint
-```
-
-如需自动修复，可结合 `pnpm lint --fix` 与 `ruff format`。
-
-### 🔁 API 测试脚本
-
-后端启动后，可使用 `server/test_api.py` 进行端到端接口验收（默认覆盖 `/auth/status`、`/auth/login`、`/providers`、`/auth/config`、`/healthz`、`/query`、`/stream`、`/upload`）。
-
-```bash
-cd server
-python test_api.py --password "$SYSTEM_PASSWORD" \
-  --base-url http://localhost:8000 \
-  --question "简单介绍一下项目？"
-```
-
-实用参数：
-
-- `--upload-file path/to/doc.pdf` 使用真实文件测试 `/upload`（默认用内存文本）。
-- `--guest-config guest.json` 触发 `/auth/guest`，JSON 内需提供 LLM/Embedding key。
-- `--test-gemini --gemini-file path/to/doc.txt` 额外测试 `/gemini/*` 路由（需配置 GEMINI_API_KEY）。
-- 所有选项也可通过环境变量传入：`API_BASE_URL`、`SYSTEM_PASSWORD`、`LLM_PROVIDER`。
-
-脚本执行结果会逐条打印接口状态，若有失败会在最后给出摘要，方便 CI / 本地冒烟验证。
-
-## 🐳 Docker 部署
-
-项目内置 `docker-compose.yml`，可在一台服务器上快速跑起 FastAPI（backend）与 Next.js（frontend）：
-
-```bash
-# 1. 准备配置
-cp server/.env.example server/.env
-cp web/.env.local.example web/.env.local  # 若需自定义
-# 在 server/.env 写入真实模型 key（硅基流动 / OpenAI / Gemini 等）
-# 在 web/.env.local 设置 NEXT_PUBLIC_API_URL=/api （Docker 部署走统一代理）
-# Docker 镜像构建时也会通过 NEXT_PUBLIC_API_URL=/api 写入前端 bundle
-
-# 2. 一键构建 + 启动
-docker compose up --build -d
-```
-
-Compose 会启动三个服务：`backend`（FastAPI）、`frontend`（Next.js）、`proxy`（Nginx）。对外只暴露 `3000` 端口，由 Nginx 统一代理 `/`（前端）与 `/api`（后端），同时持久化挂载 `server/data`、`server/uploads`。
-
-常用命令：
-
-```bash
-docker compose logs -f backend      # 查看 FastAPI 中文日志
-docker compose logs -f frontend
-docker compose logs -f proxy
-docker compose exec backend ruff check app
-docker compose down                 # 停止并删除容器
-```
-
-如需仅部署后端，可直接使用 `server/Dockerfile` 构建镜像：
-
-```bash
-docker build -f server/Dockerfile -t rag-backend .
-docker run --env-file server/.env -p 8000:8000 rag-backend
-```
-
-前端镜像则使用 `web/Dockerfile`，若单独部署，记得在外部代理中把 `/api` 转发到后端服务。 
-
-## 📋 核心功能
-
-### 💬 智能问答
-- **流式问答交互** - 实时显示AI回答过程
-- **支持Markdown格式** - 富文本回答渲染
-- **中文界面和日志** - 完全中文化的用户体验
-- **SSE流式响应** - 低延迟的实时通信
-
-### 📁 知识库管理
-- **多格式文件上传** - 支持PDF、TXT、MD、JSON格式
-- **自动文档处理** - 文本提取 → 智能分块 → 向量化存储
-- **文档列表管理** - 查看、删除已上传文档
-- **实时统计面板** - 文档数量、总大小、向量统计
-
-### 🔧 系统管理
-- **可配置模型参数** - 通过.env文件灵活配置
-- **支持多种向量数据库** - Chroma/Qdrant可选
-- **支持多种AI提供商** - OpenAI / Gemini
-- **完整的测试覆盖** - 92%代码测试覆盖率
-- **代码质量保证** - 通过ruff检查和格式化
-
-## 🎯 新增API端点
-
-### 文件管理API
-```bash
-# 上传文件到知识库
-POST /upload
-Content-Type: multipart/form-data
-参数: file (文件), description (描述), process (是否处理)
-
-# 获取已上传的文档列表
-GET /documents
-返回: 文档列表信息
-
-# 删除指定文档
-DELETE /documents/{file_id}
-参数: file_id (文件ID)
-
-# 获取文档统计信息
-GET /documents/stats
-返回: 文档数量、总大小、向量统计等
-```
-
-### Gemini 原生支持API
-```bash
-# 上传文件到Gemini并进行智能问答
-POST /gemini/upload-file
-- 支持多格式：PDF、图片、文本等
-- 最大100MB
-- 支持多模态处理
-
-# 多文件智能处理
-POST /gemini/process-with-files
-- 最多10个文件
-- 支持问答、摘要、提取
-- 原生多模态AI处理
-
-# 获取Gemini配置信息
-GET /gemini/info
-- 配置状态
-- 功能列表
-
-# 获取可用模型
-GET /gemini/models
-- 支持的Gemini模型列表
-```
-
-## 🌐 访问地址
-
-- **主页面**: http://localhost:3000
-- **智能问答**: http://localhost:3000/chat
-- **知识库管理**: http://localhost:3000/docs
-- **API文档**: http://localhost:8001/docs
-
-## ⚙️ 环境变量配置
-
-### 后端 (.env)
 ```env
-# 基础配置
-APP_NAME=RAG_知识库机器人
-ENV=dev
-PORT=8000
+SYSTEM_PASSWORD=change-me           # /auth/login 登录密码（至少 8 位）
+JWT_SECRET_KEY=some-long-secret     # JWT 签名密钥
 
-# 向量库设置
-VECTOR_DB=chroma
-VECTOR_DB_PATH=./data/chroma
-QDRANT_URL=
-QDRANT_API_KEY=
+LLM_PROVIDER=openai                 # openai | gemini | 自建兼容 API
+LLM_MODEL=gpt-4o-mini
+LLM_API_KEY=sk-...
+LLM_BASE_URL=https://api.openai.com/v1  # 可留空
 
-# 模型配置（在线 API）
 EMBEDDING_PROVIDER=openai
 EMBEDDING_MODEL=text-embedding-3-small
-EMBEDDING_API_KEY=your-api-key-here
-EMBEDDING_BASE_URL=https://api.openai.com/v1
+EMBEDDING_API_KEY=sk-...
+EMBEDDING_BASE_URL=https://api.openai.com/v1  # 可留空
 
-LLM_PROVIDER=openai
-LLM_MODEL=gpt-4o-mini
-LLM_API_KEY=your-api-key-here
-LLM_BASE_URL=https://api.openai.com/v1
+# 可选 Gemini 支持
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-2.0-flash-exp
 
-# 参数
-TOP_K=24              # 可留空，默认为 24
-MAX_TOKENS=800        # 可留空，默认为 800
-TEMPERATURE=0.3       # 可留空，默认为 0.3 (按模型默认温度)
-
-# 前端跨域
+# 其他常用参数
+VECTOR_DB=chroma                    # chroma | qdrant
+VECTOR_DB_PATH=./data/chroma
 ALLOW_ORIGINS=http://localhost:3000
 ```
 
-### 前端 (.env.local)
+如需连接 Qdrant Cloud，请同时设置 `QDRANT_URL` 与 `QDRANT_API_KEY`。
+
+### 前端（`web/.env.local`）
+
+创建 `web/.env.local` 指定后端地址：
+
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:8000  # 本地开发
-# Docker 部署可改为 NEXT_PUBLIC_API_URL=/api
+NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
-## 📊 测试覆盖率
+Docker Compose 构建时会自动覆盖为 `/api`，无需手动修改。
 
-当前测试覆盖率：92%
+## 本地运行
 
-```
-Name                     Stmts   Miss  Cover
---------------------------------------------
-app/__init__.py              0      0   100%
-app/main.py                 37      7    81%
-app/rag.py                  23      0   100%
-app/settings.py             27      3    89%
-app/tests/__init__.py        0      0   100%
-app/tests/test_main.py      35      0   100%
---------------------------------------------
-TOTAL                      122     10    92%
-```
+1. **后端**
+   ```bash
+   cd server
+   python -m venv .venv
+   source .venv/bin/activate          # Windows 使用 .venv\Scripts\activate
+   pip install -r requirements.txt
+   uvicorn app.main:app --reload --port 8000
+   ```
+   启动后访问 http://localhost:8000/docs 查看自动生成的 OpenAPI 文档。
 
-## 🌏 中文日志输出
+2. **前端**
+   ```bash
+   cd web
+   pnpm install
+   pnpm dev --port 3000
+   ```
+   浏览器打开 http://localhost:3000/chat 进入聊天界面。
 
-系统启动时会显示中文日志：
-```
-🌏 当前环境: dev
-💡 使用嵌入模型: text-embedding-3-small
-🧠 使用语言模型: gpt-4o-mini
-✅ RAG管道初始化完成
-📄 正在处理文件: example.pdf
-✅ 文件已保存: uploads/uuid.pdf
-📖 提取文本长度: 1500 字符
-✂️  文档分割完成: 5 个片段
-✅ 文件已添加到知识库
-```
+可执行 `./start.sh` 在 WSL 环境下一键启动，脚本会尝试使用 pnpm 与 uvicorn 并写入日志文件。
 
-## 🔒 安全注意事项
+## 测试
 
-1. **API密钥安全** - 不要在代码中硬编码API密钥
-2. **文件大小限制** - 单个文件最大10MB
-3. **文件类型验证** - 仅支持安全的文档格式
-4. **定期清理** - 建议定期清理上传目录
-5. **访问控制** - 生产环境建议添加用户认证
+- 后端单元测试：
+  ```bash
+  cd server
+  pytest
+  ```
+- 前端静态检查：
+  ```bash
+  cd web
+  pnpm lint
+  ```
 
-## 🚀 启动命令
+`server/test_api.py` 提供了简易的端到端校验脚本，可在服务启动后运行。
 
-### 一键启动（推荐）
+## 核心 API
+
+| 路径 | 方法 | 说明 |
+| ---- | ---- | ---- |
+| `/auth/login` | POST | 系统用户登录（使用环境配置） |
+| `/auth/guest` | POST | 游客凭用户提供的 API Key 登录 |
+| `/auth/config` | GET | 获取当前令牌对应的模型配置与可用提供商 |
+| `/providers` | GET | 列出可用模型与嵌入提供商 |
+| `/query` | POST | 非流式 RAG 问答 |
+| `/stream` | GET | SSE 流式回答（需 `question` 查询参数） |
+| `/upload` | POST | 上传文档并写入向量库 |
+| `/documents` | GET | 列出已上传文档（受保护） |
+| `/documents/{file_id}` | DELETE | 删除文档并清理向量条目 |
+| `/documents/stats` | GET | 文档数量、字数与分块统计 |
+| `/gemini/*` | 多种 | 在配置 Gemini API Key 且安装依赖后启用的文件与模型接口 |
+
+所有受保护路由需携带 `Authorization: Bearer <token>`，前端会在登录后自动注入。
+
+## Docker 部署
+
+项目提供基础的 `docker-compose.yml`，会启动 FastAPI、Next.js 与一个 Nginx 反向代理：
+
 ```bash
-cd /mnt/d/codex/rag-chatbot
-./start.sh
+# 若已准备好示例文件，可复制为实际配置；否则请手动创建对应文件
+cp server/.env.example server/.env         # 如果存在模板
+cp web/.env.local.example web/.env.local   # 如果存在模板
+
+docker compose up --build
 ```
 
-### 手动启动
-```bash
-# 启动后端
-cd server && source .venv/bin/activate
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+部署完成后访问 http://localhost:3000，前端通过 `/api` 代理访问后端。`server/data` 与 `server/uploads` 会挂载到宿主机以便持久化。
 
-# 启动前端（新终端）
-cd web && pnpm dev --hostname 0.0.0.0 --port 3000
-```
+## 贡献
 
-## 📞 支持
+欢迎通过 Issue 或 Pull Request 反馈问题与改进建议。在提交前请确保通过 `pytest` 与 `pnpm lint`，并遵循现有的代码风格。
 
-如有问题或建议，请通过以下方式反馈：
-- 查看详细配置指南：`CONFIG_GUIDE.md`
-- 查看WSL访问指南：`WSL_ACCESS_GUIDE.md`
-- 查看项目完成总结：`PROJECT_SUMMARY.md`
+## 许可证
 
----
-
-**🎉 现在您的RAG知识库机器人具备了完整的文档管理和智能问答功能！** 
-
-您可以通过知识库管理页面上传文档，系统会自动处理并构建知识库，然后在问答页面进行基于这些文档的智能问答。
+本仓库尚未添加开源许可证；在明确授权条款前，请勿在生产环境中使用或分发。

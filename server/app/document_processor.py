@@ -189,7 +189,8 @@ class DocumentProcessor:
                         "filename": file_path.name,
                         "file_size": stat.st_size,
                         "created_at": stat.st_ctime,
-                        "file_path": str(file_path)
+                        "file_path": str(file_path),
+                        "status": "stored"
                     })
         except Exception as e:
             print(f"❌ 获取文件列表失败: {str(e)}")
