@@ -4,7 +4,7 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from app.settings import settings
 import secrets
-import json
+from app.session_store import session_store, GuestSession
 
 # 密码加密上下文
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -17,7 +17,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24小时
 class AuthManager:
     def __init__(self):
         self.system_password = settings.system_password
-        self.guest_sessions: Dict[str, Dict[str, Any]] = {}
+        self.session_store = session_store
         
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
         """验证密码"""
@@ -50,19 +50,11 @@ class AuthManager:
         except JWTError:
             return None
     
-    def create_guest_session(self, session_id: str, api_config: Dict[str, Any]) -> str:
-        """创建游客会话并返回访问令牌"""
-        session_data = {
-            "session_id": session_id,
-            "user_type": "guest",
-            "api_config": api_config,
-            "created_at": datetime.utcnow().isoformat(),
-            "expires_at": (datetime.utcnow() + timedelta(hours=24)).isoformat()
-        }
+    def create_guest_session(self, session_id: str, api_config: Dict[str, Any], hours: int = 12) -> Dict[str, Any]:
+        """创建或刷新游客会话并返回会话信息"""
+        expires_at = datetime.utcnow() + timedelta(hours=hours)
+        self.session_store.save_guest_session(session_id, api_config, expires_at)
 
-        self.guest_sessions[session_id] = session_data
-
-        # 创建JWT令牌
         token_data = {
             "sub": "guest",
             "session_id": session_id,
@@ -70,28 +62,21 @@ class AuthManager:
             "api_config": api_config
         }
 
-        token = self.create_access_token(token_data)
-        session_data["access_token"] = token
-        return token
+        token = self.create_access_token(token_data, timedelta(hours=hours))
+        return {
+            "session_id": session_id,
+            "access_token": token,
+            "expires_at": expires_at,
+            "api_config": api_config,
+        }
 
-    def create_guest_token(self, session_id: str, api_config: Dict[str, Any]) -> str:
-        """创建游客令牌（向后兼容的包装方法）"""
-        return self.create_guest_session(session_id, api_config)
-    
-    def get_guest_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+    def create_guest_token(self, session_id: str, api_config: Dict[str, Any], hours: int = 12) -> Dict[str, Any]:
+        """与 create_guest_session 等价，保留旧接口兼容"""
+        return self.create_guest_session(session_id, api_config, hours=hours)
+
+    def get_guest_session(self, session_id: str) -> Optional[GuestSession]:
         """获取游客会话"""
-        session = self.guest_sessions.get(session_id)
-        if not session:
-            return None
-        
-        # 检查是否过期
-        expires_at = datetime.fromisoformat(session["expires_at"])
-        if datetime.utcnow() > expires_at:
-            # 清理过期会话
-            del self.guest_sessions[session_id]
-            return None
-        
-        return session
+        return self.session_store.load_guest_session(session_id)
     
     def validate_system_password(self, password: str) -> bool:
         """验证系统密码"""
@@ -136,7 +121,7 @@ class AuthManager:
             if session_id:
                 session = self.get_guest_session(session_id)
                 if session:
-                    return session.get("api_config", {})
+                    return session.api_config
 
             return token_data.get("api_config", {})
         else:
@@ -148,16 +133,7 @@ class AuthManager:
     
     def cleanup_expired_sessions(self):
         """清理过期的游客会话"""
-        current_time = datetime.utcnow()
-        expired_sessions = []
-        
-        for session_id, session in self.guest_sessions.items():
-            expires_at = datetime.fromisoformat(session["expires_at"])
-            if current_time > expires_at:
-                expired_sessions.append(session_id)
-        
-        for session_id in expired_sessions:
-            del self.guest_sessions[session_id]
+        self.session_store.cleanup_expired()
 
 # 全局认证管理器
 auth_manager = AuthManager()

@@ -3,11 +3,11 @@
 export interface UserConfig {
   llm_provider: string;
   llm_model: string;
-  llm_api_key: string;
+  llm_api_key?: string;
   llm_base_url?: string;
   embedding_provider: string;
   embedding_model: string;
-  embedding_api_key: string;
+  embedding_api_key?: string;
   embedding_base_url?: string;
 }
 
@@ -28,6 +28,8 @@ export interface AuthData {
       available: boolean;
     }>;
   };
+  session_id?: string;
+  expires_at?: string;
 }
 
 class AuthManager {
@@ -36,6 +38,8 @@ class AuthManager {
   private userType: 'system' | 'guest' | null = null;
   private userConfig: UserConfig | null = null;
   private providers: AuthData['providers'] | null = null;
+  private sessionId: string | null = null;
+  private sessionExpiresAt: string | null = null;
 
   private constructor() {
     this.loadFromStorage();
@@ -73,6 +77,9 @@ class AuthManager {
           this.providers = null;
         }
       }
+
+      this.sessionId = localStorage.getItem('session_id');
+      this.sessionExpiresAt = localStorage.getItem('session_expires_at');
     }
   }
 
@@ -102,6 +109,18 @@ class AuthManager {
       } else {
         localStorage.removeItem('providers');
       }
+
+      if (this.sessionId) {
+        localStorage.setItem('session_id', this.sessionId);
+      } else {
+        localStorage.removeItem('session_id');
+      }
+
+      if (this.sessionExpiresAt) {
+        localStorage.setItem('session_expires_at', this.sessionExpiresAt);
+      } else {
+        localStorage.removeItem('session_expires_at');
+      }
     }
   }
 
@@ -111,6 +130,8 @@ class AuthManager {
     this.userType = data.user_type;
     this.userConfig = data.config;
     this.providers = data.providers;
+    this.sessionId = data.session_id || null;
+    this.sessionExpiresAt = data.expires_at || null;
     this.saveToStorage();
   }
 
@@ -120,6 +141,8 @@ class AuthManager {
     this.userType = null;
     this.userConfig = null;
     this.providers = null;
+    this.sessionId = null;
+    this.sessionExpiresAt = null;
     this.saveToStorage();
   }
 
@@ -156,6 +179,20 @@ class AuthManager {
   // 检查是否为游客用户
   public isGuestUser(): boolean {
     return this.userType === 'guest';
+  }
+
+  public getSessionId(): string | null {
+    if (!this.sessionId && typeof window !== 'undefined') {
+      this.sessionId = localStorage.getItem('session_id');
+    }
+    return this.sessionId;
+  }
+
+  public getSessionExpiry(): string | null {
+    if (!this.sessionExpiresAt && typeof window !== 'undefined') {
+      this.sessionExpiresAt = localStorage.getItem('session_expires_at');
+    }
+    return this.sessionExpiresAt;
   }
 
   // 获取认证头

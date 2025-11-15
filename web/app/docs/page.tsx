@@ -35,6 +35,7 @@ export default function DocsPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [description, setDescription] = useState('');
   const router = useRouter();
+  const [userType, setUserType] = useState<'system' | 'guest' | null>(authManager.getUserType());
 
   // 支持的文件类型
   const supportedTypes = ['.pdf', '.txt', '.md', '.json'];
@@ -97,6 +98,7 @@ export default function DocsPage() {
     }
 
     loadData();
+    setUserType(authManager.getUserType());
   }, [loadData, router]);
 
   // 文件选择处理
@@ -110,9 +112,9 @@ export default function DocsPage() {
         return;
       }
 
-      // 检查文件大小 (10MB)
-      if (file.size > 10 * 1024 * 1024) {
-        alert('文件大小超过10MB限制');
+      const guestLimit = 50 * 1024 * 1024;
+      if (authManager.isGuestUser() && file.size > guestLimit) {
+        alert('游客模式下单个文件最大支持 50MB');
         return;
       }
 
@@ -219,7 +221,7 @@ export default function DocsPage() {
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 py-6">
           <h1 className="text-3xl font-bold text-gray-900">知识库管理</h1>
-          <p className="text-gray-600 mt-2">上传和管理您的文档，构建智能知识库</p>
+          <p className="text-gray-600 mt-2">上传和管理您的文档，构建智能知识库。{userType === 'guest' ? '游客模式单个文件最大 50MB。' : '系统用户当前无文件大小限制。'}</p>
         </div>
       </header>
 

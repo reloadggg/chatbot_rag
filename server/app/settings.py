@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     system_password: str = ""
     jwt_secret_key: str = ""
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.0-flash-exp"
+    gemini_model: str = "gemini-2.5-pro"
     gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
 
     top_k: Optional[int] = None

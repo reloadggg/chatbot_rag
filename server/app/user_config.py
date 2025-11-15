@@ -129,7 +129,7 @@ class UserConfigManager:
         if provider == "gemini":
             return {
                 "llm_provider": "gemini",
-                "llm_model": "gemini-2.0-flash-exp",
+                "llm_model": settings.gemini_model or "gemini-2.5-pro",
                 "llm_api_key": "",
                 "llm_base_url": "https://generativelanguage.googleapis.com/v1beta",
                 "embedding_provider": "gemini",
