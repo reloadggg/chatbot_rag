@@ -1,18 +1,27 @@
-# Chatbot RAG
+# 🤖 RAG ChatBot 快速上手
 
-一个采用 FastAPI + LangChain 后端与 Next.js 前端的检索增强生成（RAG）聊天与知识库管理项目。仓库包含后端 API、Web 聊天界面、文档管理页以及可选的 Gemini 多模态扩展，目标是提供可自部署的中文知识库问答体验。
+> TL;DR：这是一个结合 FastAPI + LangChain 后端与 Next.js 前端的中文检索增强生成（RAG）聊天系统，内建鉴权、知识库管理与 Gemini 扩展，支持本地或 Docker 一键部署。
 
-## 功能概览
+---
 
-- **RAG 对话服务**：内置文档向量化、相似度检索、LangChain 推理链，支持 SSE 流式回答。
-- **知识库管理**：上传、列表、统计、删除接口与前端页面，所有操作都需要携带认证令牌。
-- **多提供商配置**：支持系统用户使用环境变量配置，也允许游客用户提交自定义的 OpenAI / Gemini API Key。
-- **苹果风格 Web UI**：聊天页采用类 iMessage 的玻璃拟态布局、自动伸缩输入框与快捷提示卡片。
-- **可选 Gemini 能力**：若提供 Google API Key 并安装 `google-generativeai`，可调用 Gemini 文件处理与多模态接口。
+## ✨ 你能获得什么？
 
-## 目录结构
+| 模块 | 能力亮点 |
+| --- | --- |
+| 💬 **RAG 对话** | 文档向量化、相似度检索、SSE 流式回答，适合知识库问答与长文本总结 |
+| 📚 **知识库管理** | 网页端上传 / 删除文档、统计字数与分块，所有操作均需鉴权 |
+| 🔐 **双模式登录** | 系统密码模式复用服务端配置，游客模式允许携带自有 API Key |
+| 🌐 **多提供商支持** | 可切换 OpenAI、Gemini 或自建兼容 API，前后端均支持自定义 Base URL |
+| 🖼️ **可选 Gemini 多模态** | 启用后可调用文件处理、图像/音频问答等原生 Gemini 路由 |
+| 🪟 **现代化界面** | iMessage 风格聊天、响应式输入框、快捷提示卡片与文档管理页面 |
 
-```
+更多鉴权细节请查看 [`README_AUTH.md`](README_AUTH.md)，Gemini 使用指南见 [`README_GEMINI.md`](README_GEMINI.md)。
+
+---
+
+## 🧭 项目结构速览
+
+```text
 .
 ├── server/                # FastAPI 应用与 LangChain RAG 管线
 │   ├── app/
@@ -34,22 +43,24 @@
 │   └── ...
 ├── deploy/nginx/          # Docker Compose 使用的 Nginx 配置
 ├── docker-compose.yml
-├── start.sh               # 可选的本地一键启动脚本（WSL 辅助）
-└── start_simple.sh
+├── start.sh               # WSL / Linux 下的组合启动脚本
+└── start_simple.sh        # 精简版启动脚本
 ```
 
-## 环境要求
+---
+
+## ⚙️ 环境要求
 
 - Python 3.10+
 - Node.js 18+ 与 [pnpm](https://pnpm.io)
-- OpenAI、OpenRouter 或兼容的 LLM / 向量服务 API Key（最少需要一个 LLM 与一个嵌入模型）
-- （可选）Google Gemini API Key 与 `google-generativeai` 依赖，用于启用多模态路由
+- 至少一个 LLM 与一个嵌入模型的 API Key（OpenAI、OpenRouter 或其他兼容服务）
+- （可选）Google Gemini API Key 与 `google-generativeai` 依赖，用于启用多模态接口
 
-## 配置
+---
 
-### 后端（`server/.env`）
+## 🗂️ 配置清单
 
-后端使用 Pydantic Settings 读取 `server/.env`。请创建该文件并补齐至少以下字段：
+### 1. 后端：`server/.env`
 
 ```env
 SYSTEM_PASSWORD=change-me           # /auth/login 登录密码（至少 8 位）
@@ -75,21 +86,21 @@ VECTOR_DB_PATH=./data/chroma
 ALLOW_ORIGINS=http://localhost:3000
 ```
 
-如需连接 Qdrant Cloud，请同时设置 `QDRANT_URL` 与 `QDRANT_API_KEY`。
+> ☁️ 连接 Qdrant Cloud 时，请额外设置 `QDRANT_URL` 与 `QDRANT_API_KEY`。
 
-### 前端（`web/.env.local`）
-
-创建 `web/.env.local` 指定后端地址：
+### 2. 前端：`web/.env.local`
 
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
-Docker Compose 构建时会自动覆盖为 `/api`，无需手动修改。
+Docker Compose 运行时会自动重写为 `/api`，无需手动修改。
 
-## 本地运行
+---
 
-1. **后端**
+## 🚀 启动流程
+
+1. **启动后端**
    ```bash
    cd server
    python -m venv .venv
@@ -97,69 +108,82 @@ Docker Compose 构建时会自动覆盖为 `/api`，无需手动修改。
    pip install -r requirements.txt
    uvicorn app.main:app --reload --port 8000
    ```
-   启动后访问 http://localhost:8000/docs 查看自动生成的 OpenAPI 文档。
+   打开 http://localhost:8000/docs 查看自动生成的 OpenAPI 文档。
 
-2. **前端**
+2. **启动前端**
    ```bash
    cd web
    pnpm install
    pnpm dev --port 3000
    ```
-   浏览器打开 http://localhost:3000/chat 进入聊天界面。
+   浏览器访问 http://localhost:3000/chat 即可体验聊天页面。
 
-可执行 `./start.sh` 在 WSL 环境下一键启动，脚本会尝试使用 pnpm 与 uvicorn 并写入日志文件。
+> 🛟 想要更省心？在 WSL 环境下执行 `./start.sh` 会同时拉起前后端并输出日志。
 
-## 测试
+---
 
-- 后端单元测试：
-  ```bash
-  cd server
-  pytest
-  ```
-- 前端静态检查：
-  ```bash
-  cd web
-  pnpm lint
-  ```
-
-`server/test_api.py` 提供了简易的端到端校验脚本，可在服务启动后运行。
-
-## 核心 API
+## 🔐 核心 API & 鉴权
 
 | 路径 | 方法 | 说明 |
 | ---- | ---- | ---- |
-| `/auth/login` | POST | 系统用户登录（使用环境配置） |
-| `/auth/guest` | POST | 游客凭用户提供的 API Key 登录 |
-| `/auth/config` | GET | 获取当前令牌对应的模型配置与可用提供商 |
-| `/providers` | GET | 列出可用模型与嵌入提供商 |
+| `/auth/login` | POST | 系统用户登录（使用服务器 `.env` 配置） |
+| `/auth/guest` | POST | 游客登录（自带 API Key 与模型配置） |
+| `/auth/config` | GET | 返回当前令牌对应的模型配置 |
+| `/providers` | GET | 列出可用 LLM 与嵌入模型提供商 |
 | `/query` | POST | 非流式 RAG 问答 |
 | `/stream` | GET | SSE 流式回答（需 `question` 查询参数） |
 | `/upload` | POST | 上传文档并写入向量库 |
 | `/documents` | GET | 列出已上传文档（受保护） |
-| `/documents/{file_id}` | DELETE | 删除文档并清理向量条目 |
-| `/documents/stats` | GET | 文档数量、字数与分块统计 |
-| `/gemini/*` | 多种 | 在配置 Gemini API Key 且安装依赖后启用的文件与模型接口 |
+| `/documents/{file_id}` | DELETE | 删除指定文档 |
+| `/documents/stats` | GET | 文档统计信息 |
+| `/gemini/*` | 多种 | 启用 Gemini 后的文件处理与模型接口 |
 
-所有受保护路由需携带 `Authorization: Bearer <token>`，前端会在登录后自动注入。
+所有受保护接口都需要在请求头中携带 `Authorization: Bearer <token>`。获取令牌的完整流程请参考 [`README_AUTH.md`](README_AUTH.md)。
 
-## Docker 部署
+---
 
-项目提供基础的 `docker-compose.yml`，会启动 FastAPI、Next.js 与一个 Nginx 反向代理：
+## 🧪 验证与测试
+
+- **后端单元测试**
+  ```bash
+  cd server
+  pytest
+  ```
+- **前端静态检查**
+  ```bash
+  cd web
+  pnpm lint
+  ```
+- **端到端验证（可选）**：在服务启动后执行 `python server/test_api.py`。
+
+---
+
+## 🐳 Docker 部署
 
 ```bash
-# 若已准备好示例文件，可复制为实际配置；否则请手动创建对应文件
-cp server/.env.example server/.env         # 如果存在模板
-cp web/.env.local.example web/.env.local   # 如果存在模板
+# 如果提供了示例配置，可先复制
+cp server/.env.example server/.env         # 若不存在请手动创建
+cp web/.env.local.example web/.env.local   # 若不存在请手动创建
 
 docker compose up --build
 ```
 
-部署完成后访问 http://localhost:3000，前端通过 `/api` 代理访问后端。`server/data` 与 `server/uploads` 会挂载到宿主机以便持久化。
+完成后访问 http://localhost:3000，前端会通过 `/api` 代理请求后端；`server/data` 与 `server/uploads` 会挂载到宿主机以便持久化。
 
-## 贡献
+---
 
-欢迎通过 Issue 或 Pull Request 反馈问题与改进建议。在提交前请确保通过 `pytest` 与 `pnpm lint`，并遵循现有的代码风格。
+## 🤝 贡献指南
 
-## 许可证
+欢迎提交 Issue 或 Pull Request，一起完善中文 RAG 体验。提交前请确保：
+
+- 代码通过 `pytest` 与 `pnpm lint`
+- 相关文档已同步更新（例如鉴权、Gemini 或部署指南）
+- Commit 信息语义清晰，遵循 Conventional Commits 风格
+
+---
+
+## 📄 许可证
 
 本仓库尚未添加开源许可证；在明确授权条款前，请勿在生产环境中使用或分发。
+
+祝你玩得开心，期待你的反馈！🎉
