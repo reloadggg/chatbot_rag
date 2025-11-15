@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { apiUrl } from '../../lib/api';
+import { authManager } from '../lib/auth';
 
 interface Document {
   file_id: string;
@@ -32,14 +34,34 @@ export default function DocsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [description, setDescription] = useState('');
+  const router = useRouter();
 
   // 支持的文件类型
   const supportedTypes = ['.pdf', '.txt', '.md', '.json'];
 
   // 获取文档列表
+  const authorizedFetch = useCallback(
+    async (input: RequestInfo, init: RequestInit = {}) => {
+      const headers = {
+        ...init.headers,
+        ...authManager.getAuthHeader(),
+      } as HeadersInit;
+
+      const response = await fetch(input, { ...init, headers });
+
+      if (response.status === 401) {
+        authManager.logout(router);
+        throw new Error('未授权访问');
+      }
+
+      return response;
+    },
+    [router]
+  );
+
   const fetchDocuments = useCallback(async () => {
     try {
-      const response = await fetch(apiUrl('/documents'));
+      const response = await authorizedFetch(apiUrl('/documents'));
       if (response.ok) {
         const data = await response.json();
         setDocuments(data);
@@ -47,12 +69,12 @@ export default function DocsPage() {
     } catch (error) {
       console.error('获取文档列表失败:', error);
     }
-  }, []);
+  }, [authorizedFetch]);
 
   // 获取统计信息
   const fetchStats = useCallback(async () => {
     try {
-      const response = await fetch(apiUrl('/documents/stats'));
+      const response = await authorizedFetch(apiUrl('/documents/stats'));
       if (response.ok) {
         const data = await response.json();
         setStats(data);
@@ -60,7 +82,7 @@ export default function DocsPage() {
     } catch (error) {
       console.error('获取统计信息失败:', error);
     }
-  }, []);
+  }, [authorizedFetch]);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -69,8 +91,13 @@ export default function DocsPage() {
   }, [fetchDocuments, fetchStats]);
 
   useEffect(() => {
+    if (!authManager.requireAuth(router)) {
+      setIsLoading(false);
+      return;
+    }
+
     loadData();
-  }, [loadData]);
+  }, [loadData, router]);
 
   // 文件选择处理
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -110,7 +137,7 @@ export default function DocsPage() {
       }
       formData.append('process', 'true');
 
-      const response = await fetch(apiUrl('/upload'), {
+      const response = await authorizedFetch(apiUrl('/upload'), {
         method: 'POST',
         body: formData,
       });
@@ -144,7 +171,7 @@ export default function DocsPage() {
     }
 
     try {
-      const response = await fetch(apiUrl(`/documents/${fileId}`), {
+      const response = await authorizedFetch(apiUrl(`/documents/${fileId}`), {
         method: 'DELETE',
       });
 

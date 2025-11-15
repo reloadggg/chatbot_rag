@@ -51,7 +51,7 @@ class AuthManager:
             return None
     
     def create_guest_session(self, session_id: str, api_config: Dict[str, Any]) -> str:
-        """创建游客会话"""
+        """创建游客会话并返回访问令牌"""
         session_data = {
             "session_id": session_id,
             "user_type": "guest",
@@ -59,9 +59,9 @@ class AuthManager:
             "created_at": datetime.utcnow().isoformat(),
             "expires_at": (datetime.utcnow() + timedelta(hours=24)).isoformat()
         }
-        
+
         self.guest_sessions[session_id] = session_data
-        
+
         # 创建JWT令牌
         token_data = {
             "sub": "guest",
@@ -69,8 +69,14 @@ class AuthManager:
             "user_type": "guest",
             "api_config": api_config
         }
-        
-        return self.create_access_token(token_data)
+
+        token = self.create_access_token(token_data)
+        session_data["access_token"] = token
+        return token
+
+    def create_guest_token(self, session_id: str, api_config: Dict[str, Any]) -> str:
+        """创建游客令牌（向后兼容的包装方法）"""
+        return self.create_guest_session(session_id, api_config)
     
     def get_guest_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         """获取游客会话"""
@@ -125,7 +131,13 @@ class AuthManager:
                 "embedding_base_url": settings.embedding_base_url or None
             }
         elif user_type == "guest":
-            # 游客用户使用自己的配置
+            # 游客用户优先使用会话中保存的配置
+            session_id = token_data.get("session_id")
+            if session_id:
+                session = self.get_guest_session(session_id)
+                if session:
+                    return session.get("api_config", {})
+
             return token_data.get("api_config", {})
         else:
             return {}
